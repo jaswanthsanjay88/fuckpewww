@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Fcuk-Pewww",
+  "version": "1.0",
+  "description": "Automatically shows a download button when viewing PDFs.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "downloads",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.paruluniversity.ac.in/*",
+    "*://elearning.paruluniversity.ac.in/*",
+    "*://storage.googleapis.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.paruluniversity.ac.in/*", "*://elearning.paruluniversity.ac.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
