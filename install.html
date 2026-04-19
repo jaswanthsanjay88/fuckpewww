@@ -96,7 +96,7 @@
     }
 
     .page {
-      width: min(1100px, calc(100% - 32px));
+      width: min(1180px, calc(100% - 32px));
       margin: 0 auto;
       padding: var(--space-xl) 0 var(--space-2xl);
     }
@@ -211,6 +211,7 @@
     .hero {
       border-radius: var(--radius-hero);
       padding: clamp(28px, 5vw, 56px);
+      max-width: 100%;
       background: linear-gradient(160deg, var(--surface-strong), var(--surface));
       border: 1px solid var(--line);
       box-shadow: var(--shadow-hero);
@@ -315,7 +316,7 @@
 
     .steps-grid {
       display: grid;
-      gap: var(--space-lg);
+      gap: clamp(18px, 2.4vw, 28px);
     }
 
     .steps-intro {
@@ -391,7 +392,7 @@
 
     .mini-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: var(--space-md);
       margin-top: var(--space-lg);
     }
@@ -415,12 +416,74 @@
     }
 
     @media (max-width: 900px) {
-      .page { width: min(1100px, calc(100% - 20px)); padding-top: var(--space-lg); }
-      .top-nav { top: var(--space-sm); }
+      .page {
+        width: min(1180px, calc(100% - 20px));
+        padding-top: var(--space-lg);
+      }
+
+      .top-nav {
+        top: var(--space-sm);
+        padding: 10px 12px;
+        border-radius: 24px;
+      }
+
       .hero { padding: 26px; }
       .step-top { grid-template-columns: 1fr; }
       .step-badge { width: 42px; height: 42px; border-radius: 14px; }
       .mini-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .top-nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-sm);
+      }
+
+      .brand {
+        justify-content: center;
+      }
+
+      .nav-links {
+        justify-content: center;
+      }
+
+      .nav-links a,
+      .nav-links button {
+        flex: 1 1 auto;
+      }
+
+      .cta-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      .step-footer {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .hero {
+        padding: 26px;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .page {
+        width: min(1240px, calc(100% - 64px));
+      }
+
+      .hero {
+        padding: 64px;
+      }
+
+      .steps-grid {
+        gap: 28px;
+      }
     }
 
     @keyframes fade-up {
