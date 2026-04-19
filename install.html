@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Install Guide</title>
+  <style>
+    :root {
+      --bg-primary: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.76);
+      --surface-strong: rgba(255, 255, 255, 0.92);
+      --line: rgba(0, 0, 0, 0.08);
+      --text-primary: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --accent: #0071e3;
+      --accent-strong: #0066cc;
+      --bloom-a: rgba(0, 113, 227, 0.12);
+      --bloom-b: rgba(10, 132, 255, 0.08);
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 48px;
+      --space-2xl: 96px;
+      --radius-hero: 30px;
+      --radius-panel: 24px;
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+      --shadow-hero: 0 18px 44px rgba(0, 0, 0, 0.08);
+      --shadow-panel: 0 10px 26px rgba(0, 0, 0, 0.06);
+      --text-hero: clamp(2.2rem, 8vw, 4rem);
+      --text-title: 1.875rem;
+      --text-body: 1.0625rem;
+      --text-caption: 0.8125rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #000000;
+        --surface: rgba(29, 29, 31, 0.72);
+        --surface-strong: rgba(29, 29, 31, 0.9);
+        --line: rgba(255, 255, 255, 0.12);
+        --text-primary: #f5f5f7;
+        --text-secondary: #a1a1a6;
+        --accent: #2997ff;
+        --accent-strong: #58abff;
+        --bloom-a: rgba(41, 151, 255, 0.2);
+        --bloom-b: rgba(88, 171, 255, 0.13);
+        --shadow-hero: 0 24px 56px rgba(0, 0, 0, 0.48);
+        --shadow-panel: 0 16px 34px rgba(0, 0, 0, 0.36);
+      }
+    }
+
+    :root[data-theme="light"] {
+      --bg-primary: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.76);
+      --surface-strong: rgba(255, 255, 255, 0.92);
+      --line: rgba(0, 0, 0, 0.08);
+      --text-primary: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --accent: #0071e3;
+      --accent-strong: #0066cc;
+      --bloom-a: rgba(0, 113, 227, 0.12);
+      --bloom-b: rgba(10, 132, 255, 0.08);
+      --shadow-hero: 0 18px 44px rgba(0, 0, 0, 0.08);
+      --shadow-panel: 0 10px 26px rgba(0, 0, 0, 0.06);
+    }
+
+    :root[data-theme="dark"] {
+      --bg-primary: #000000;
+      --surface: rgba(29, 29, 31, 0.72);
+      --surface-strong: rgba(29, 29, 31, 0.9);
+      --line: rgba(255, 255, 255, 0.12);
+      --text-primary: #f5f5f7;
+      --text-secondary: #a1a1a6;
+      --accent: #2997ff;
+      --accent-strong: #58abff;
+      --bloom-a: rgba(41, 151, 255, 0.2);
+      --bloom-b: rgba(88, 171, 255, 0.13);
+      --shadow-hero: 0 24px 56px rgba(0, 0, 0, 0.48);
+      --shadow-panel: 0 16px 34px rgba(0, 0, 0, 0.36);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      color: var(--text-primary);
+      background:
+        radial-gradient(860px 540px at 8% -12%, var(--bloom-a), rgba(0, 113, 227, 0) 62%),
+        radial-gradient(760px 480px at 100% -8%, var(--bloom-b), rgba(10, 132, 255, 0) 66%),
+        linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-primary) 100%);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    .page {
+      width: min(1100px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: var(--space-xl) 0 var(--space-2xl);
+    }
+
+    .top-nav {
+      position: sticky;
+      top: var(--space-md);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow-panel);
+      margin-bottom: var(--space-xl);
+      animation: fade-up 520ms var(--ease-out);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-primary);
+      text-decoration: none;
+      min-height: 44px;
+      padding: 0 10px;
+      border-radius: 999px;
+    }
+
+    .brand-logo {
+      width: 26px;
+      height: 26px;
+      display: block;
+      flex: 0 0 auto;
+    }
+
+    .nav-links {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav-links a,
+    .nav-links button {
+      min-height: 44px;
+      padding: 0 14px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid transparent;
+      background: transparent;
+      transition: background-color 180ms var(--ease-out), color 180ms var(--ease-out), transform 180ms var(--ease-out), border-color 180ms var(--ease-out);
+      cursor: pointer;
+    }
+
+    .nav-links .github-link {
+      color: var(--text-primary);
+    }
+
+    .nav-links .github-link {
+      width: 44px;
+      padding: 0;
+    }
+
+    .github-icon {
+      width: 18px;
+      height: 18px;
+      display: block;
+      flex: 0 0 auto;
+    }
+
+    .nav-links .star-link {
+      background: linear-gradient(180deg, #f9e28a 0%, #d4a62d 100%);
+      color: #1d1d1f;
+      border-color: transparent;
+    }
+
+    .nav-links .star-link:hover {
+      filter: brightness(1.03);
+      color: #1d1d1f;
+    }
+
+    .nav-links a:hover,
+    .nav-links button:hover {
+      background: var(--surface-strong);
+      color: var(--text-primary);
+      border-color: var(--line);
+    }
+
+    .nav-links button:active,
+    .nav-links a:active {
+      transform: scale(0.97);
+    }
+
+    .theme-toggle .sun,
+    .theme-toggle .moon { width: 16px; height: 16px; display: none; }
+    :root[data-theme="light"] .theme-toggle .moon { display: block; }
+    :root[data-theme="dark"] .theme-toggle .sun { display: block; }
+
+    .hero {
+      border-radius: var(--radius-hero);
+      padding: clamp(28px, 5vw, 56px);
+      background: linear-gradient(160deg, var(--surface-strong), var(--surface));
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-hero);
+      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px);
+      animation: fade-up 650ms var(--ease-out);
+    }
+
+    .eyebrow {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--text-caption);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 580;
+    }
+
+    h1 {
+      margin: var(--space-md) 0 0;
+      font-size: var(--text-hero);
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      font-weight: 590;
+      max-width: 14ch;
+    }
+
+    .lead {
+      margin: var(--space-lg) 0 0;
+      max-width: 64ch;
+      color: var(--text-secondary);
+      font-size: var(--text-body);
+      line-height: 1.6;
+    }
+
+    .cta-row {
+      margin-top: var(--space-lg);
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+    }
+
+    .btn {
+      min-height: 48px;
+      padding: 12px 22px;
+      border-radius: 999px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 520;
+      font-size: 15px;
+      transition: transform 180ms var(--ease-out), background-color 180ms var(--ease-out), border-color 180ms var(--ease-out), color 180ms var(--ease-out), filter 180ms var(--ease-out);
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #ffffff;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-strong);
+      transform: translateY(-1px);
+    }
+
+    .btn-ghost {
+      background: var(--surface);
+      color: var(--text-primary);
+      border: 1px solid var(--line);
+    }
+
+    .btn-ghost:hover { background: var(--surface-strong); }
+
+    .meta {
+      margin-top: var(--space-md);
+      color: var(--text-secondary);
+      font-size: var(--text-caption);
+    }
+
+    .section-divider {
+      margin: var(--space-xl) 0 var(--space-lg);
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: var(--space-md);
+      color: var(--text-secondary);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 560;
+    }
+
+    .section-divider::before,
+    .section-divider::after {
+      content: "";
+      height: 1px;
+      background: var(--line);
+    }
+
+    .steps-grid {
+      display: grid;
+      gap: var(--space-lg);
+    }
+
+    .steps-intro {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--text-body);
+      max-width: 66ch;
+    }
+
+    .step-card {
+      border-radius: var(--radius-panel);
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+      animation: fade-up 700ms var(--ease-out);
+    }
+
+    .step-top {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-lg);
+      padding: var(--space-lg);
+      align-items: center;
+    }
+
+    .step-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 113, 227, 0.12);
+      color: var(--accent);
+      font-size: 18px;
+      font-weight: 600;
+      flex: 0 0 auto;
+    }
+
+    .step-title {
+      margin: 0;
+      font-size: 1.25rem;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      font-weight: 580;
+    }
+
+    .step-copy {
+      margin: 6px 0 0;
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.58;
+    }
+
+    .step-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #0f0f10;
+      border-top: 1px solid var(--line);
+    }
+
+    .step-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      padding: 0 var(--space-lg) var(--space-lg);
+      color: var(--text-secondary);
+      font-size: var(--text-caption);
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-md);
+      margin-top: var(--space-lg);
+    }
+
+    .mini-card {
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+      box-shadow: var(--shadow-panel);
+      padding: var(--space-md);
+    }
+
+    .mini-card strong { display: block; margin-bottom: 6px; }
+    .mini-card span { color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+
+    .footer-note {
+      margin-top: var(--space-xl);
+      color: var(--text-secondary);
+      font-size: var(--text-caption);
+      line-height: 1.6;
+    }
+
+    @media (max-width: 900px) {
+      .page { width: min(1100px, calc(100% - 20px)); padding-top: var(--space-lg); }
+      .top-nav { top: var(--space-sm); }
+      .hero { padding: 26px; }
+      .step-top { grid-template-columns: 1fr; }
+      .step-badge { width: 42px; height: 42px; border-radius: 14px; }
+      .mini-grid { grid-template-columns: 1fr; }
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(18px) scale(0.985); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <nav class="top-nav" aria-label="Primary">
+      <a class="brand" href="index.html" aria-label="Home">
+        <img class="brand-logo" src="https://www.jaswanthsanjay.me/logo.svg" alt="Site logo" />
+      </a>
+      <div class="nav-links">
+        <a class="github-link" href="https://github.com/jaswanthsanjay88/fuckpewww" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
+          <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297C5.373.297.014 5.653.014 12.28c0 5.296 3.438 9.791 8.207 11.387.6.11.82-.26.82-.577 0-.285-.011-1.04-.016-2.04-3.338.725-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.746.083-.732.083-.732 1.205.085 1.839 1.237 1.839 1.237 1.07 1.833 2.807 1.303 3.49.996.109-.776.42-1.303.763-1.602-2.665-.303-5.467-1.334-5.467-5.936 0-1.311.468-2.382 1.236-3.222-.125-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.302 1.23.958-.266 1.988-.4 3.011-.405 1.022.005 2.053.139 3.012.405 2.293-1.552 3.299-1.23 3.299-1.23.655 1.652.244 2.873.12 3.176.77.84 1.235 1.911 1.235 3.222 0 4.614-2.806 5.63-5.478 5.927.43.372.815 1.104.815 2.224 0 1.607-.015 2.903-.015 3.297 0 .32.217.693.824.576 4.767-1.595 8.205-6.091 8.205-11.386C23.984 5.653 18.626.297 12 .297z"></path></svg>
+        </a>
+        <a class="star-link" href="https://github.com/jaswanthsanjay88/fuckpewww" target="_blank" rel="noopener noreferrer">Star repo</a>
+        <a href="index.html">Home</a>
+        <a href="https://download1531.mediafire.com/ahac3nkorosgyOwum10TazqRUk-Ea6j_nEauqPAGkJir2IgNc-XEqYFRAMmHmJAyFQHTbUQbqooTt49CoblwidKEQci38fBwkBLUUDhxox_SHPhFvR3yWReGoiImJjHcMQgmF2jo_NXJytcx685Bt2bS01yGS5RmZiCMR7s3SYJo/xyojocjv8vbvu4p/parul-elearning.zip" target="_blank" rel="noopener noreferrer">Download ZIP</a>
+        <button id="themeToggle" class="theme-toggle" aria-label="Toggle light and dark theme" title="Toggle theme" type="button">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M4.93 19.07l1.41-1.41"></path><path d="M17.66 6.34l1.41-1.41"></path></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3c0 0 0 0 0 0A7 7 0 0 0 21 12.79z"></path></svg>
+        </button>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">Installation Guide</p>
+      <h1>Set up the extension in a few clear steps.</h1>
+      <p class="lead">This guide uses the actual screenshots from your setup flow, arranged in a cleaner Apple-style layout so installation feels simple and deliberate.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://download1531.mediafire.com/ahac3nkorosgyOwum10TazqRUk-Ea6j_nEauqPAGkJir2IgNc-XEqYFRAMmHmJAyFQHTbUQbqooTt49CoblwidKEQci38fBwkBLUUDhxox_SHPhFvR3yWReGoiImJjHcMQgmF2jo_NXJytcx685Bt2bS01yGS5RmZiCMR7s3SYJo/xyojocjv8vbvu4p/parul-elearning.zip" target="_blank" rel="noopener noreferrer">Download ZIP</a>
+        <a class="btn btn-ghost" href="index.html">Back to Home</a>
+      </div>
+      <p class="meta">Screenshots are stored in assets/images/install for cleaner project structure.</p>
+    </section>
+
+    <div class="section-divider" aria-hidden="true">Setup Flow</div>
+
+    <section class="steps-grid">
+      <p class="steps-intro">Extract the ZIP first, then load the unpacked folder into Chrome or any Chromium browser. Follow the screenshots in order below.</p>
+
+      <article class="step-card">
+        <div class="step-top">
+          <div class="step-badge">1</div>
+          <div>
+            <h2 class="step-title">Open Chrome Extensions</h2>
+            <p class="step-copy">Go to the browser extensions page and turn on Developer mode before loading the folder.</p>
+          </div>
+        </div>
+        <img class="step-image" src="assets/images/install/step-01-open-extensions.png" alt="Chrome extensions page with developer mode highlighted" />
+        <div class="step-footer"><span>Developer mode</span><span>First step</span></div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-top">
+          <div class="step-badge">2</div>
+          <div>
+            <h2 class="step-title">Load the unpacked folder</h2>
+            <p class="step-copy">Click Load unpacked, then choose the extracted extension directory from your laptop.</p>
+          </div>
+        </div>
+        <img class="step-image" src="assets/images/install/step-02-load-unpacked.png" alt="Chrome extensions page with the Load unpacked button highlighted" />
+        <div class="step-footer"><span>Load unpacked</span><span>Select the folder</span></div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-top">
+          <div class="step-badge">3</div>
+          <div>
+            <h2 class="step-title">Choose the extracted ZIP folder</h2>
+            <p class="step-copy">In the folder dialog, select the extracted project folder itself, not a nested file inside it.</p>
+          </div>
+        </div>
+        <img class="step-image" src="assets/images/install/step-03-select-folder.png" alt="Folder selection dialog showing the extension directory" />
+        <div class="step-footer"><span>Pick the root folder</span><span>Not a subfolder</span></div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-top">
+          <div class="step-badge">4</div>
+          <div>
+            <h2 class="step-title">Verify the extension is active</h2>
+            <p class="step-copy">After installation, confirm the extension card is visible and enabled in the extensions list.</p>
+          </div>
+        </div>
+        <img class="step-image" src="assets/images/install/step-04-extension-installed.png" alt="Installed extension card in Chrome extensions" />
+        <div class="step-footer"><span>Enabled state</span><span>Ready to use</span></div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-top">
+          <div class="step-badge">5</div>
+          <div>
+            <h2 class="step-title">Open the page menu if needed</h2>
+            <p class="step-copy">If you need to reopen extensions or troubleshoot, use the browser menu path to access the extensions panel.</p>
+          </div>
+        </div>
+        <img class="step-image" src="assets/images/install/step-05-open-menu.png" alt="Browser menu opened to the extensions submenu" />
+        <div class="step-footer"><span>Menu path</span><span>Troubleshooting</span></div>
+      </article>
+
+      <div class="mini-grid">
+        <div class="mini-card"><strong>Before install</strong><span>Extract the ZIP to a stable folder, then keep it there so the extension path does not break.</span></div>
+        <div class="mini-card"><strong>After install</strong><span>Refresh the PDF page once. The floating action button should appear when a supported stream is detected.</span></div>
+        <div class="mini-card"><strong>Helpful note</strong><span>If you move the folder later, remove and re-load the extension from chrome://extensions.</span></div>
+      </div>
+
+      <p class="footer-note">GitHub repo: <a href="https://github.com/jaswanthsanjay88/fuckpewww" target="_blank" rel="noopener noreferrer">https://github.com/jaswanthsanjay88/fuckpewww</a></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const toggle = document.getElementById('themeToggle');
+      const key = 'pdf-assistant-theme';
+      const stored = localStorage.getItem(key);
+      root.setAttribute('data-theme', stored || 'light');
+
+      toggle.addEventListener('click', function () {
+        const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        localStorage.setItem(key, next);
+      });
+    })();
+  </script>
+</body>
+</html>
