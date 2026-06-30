@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fcuk-Pewww",
-  "version": "1.0",
+  "version": "1.2",
   "description": "Automatically shows a download button when viewing PDFs.",
   "action": {
     "default_popup": "popup.html"
