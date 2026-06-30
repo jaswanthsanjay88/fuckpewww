@@ -1,20 +1,65 @@
-const __t = (document.currentScript && document.currentScript.getAttribute('data-ext-token')) || '';
+(function() {
+    'use strict';
 
-// Listen for the specific Google Storage URL that the PDF viewer requests
-const originalFetch = window.fetch;
-window.fetch = async function(...args) {
-    const url = args[0];
-    if (typeof url === 'string' && url.includes('storage.googleapis.com/parul-local-important') && __t) {
-        // Send the URL out to the extension
-        window.postMessage({ type: 'PDF_URL_FOUND', url: url, k: __t }, '*');
+    // Get security token with a fallback in case document.currentScript is null
+    let __t = '';
+    if (document.currentScript) {
+        __t = document.currentScript.getAttribute('data-ext-token') || '';
+    } else {
+        const scr = document.querySelector('script[data-ext-token]');
+        if (scr) {
+            __t = scr.getAttribute('data-ext-token') || '';
+        }
     }
-    return originalFetch.apply(this, args);
-};
 
-const originalOpen = XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open = function(method, url) {
-    if (typeof url === 'string' && url.includes('storage.googleapis.com/parul-local-important') && __t) {
-        window.postMessage({ type: 'PDF_URL_FOUND', url: url, k: __t }, '*');
+    if (!__t) return;
+
+    // Helper to determine if a URL is a Google Cloud Storage or AWS S3 PDF file
+    function isPdfUrl(url) {
+        if (typeof url !== 'string') return false;
+        const lower = url.toLowerCase();
+        return (lower.includes('storage.googleapis.com') || lower.includes('amazonaws.com')) && 
+               lower.includes('.pdf') && 
+               !lower.includes('api.paruluniversity.ac.in');
     }
-    return originalOpen.apply(this, arguments);
-};
+
+    // Intercept window.fetch
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        if (args[0]) {
+            let url = '';
+            if (typeof args[0] === 'string') {
+                url = args[0];
+            } else if (typeof args[0] === 'object' && args[0].url) {
+                url = args[0].url;
+            } else if (args[0].toString) {
+                url = args[0].toString();
+            }
+
+            if (isPdfUrl(url)) {
+                window.postMessage({ type: 'PDF_URL_FOUND', url: url, k: __t }, '*');
+            }
+        }
+        return originalFetch.apply(this, args);
+    };
+
+    // Intercept XMLHttpRequest
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+        if (url) {
+            let urlStr = '';
+            if (typeof url === 'string') {
+                urlStr = url;
+            } else if (url && url.href) {
+                urlStr = url.href;
+            } else {
+                urlStr = url.toString();
+            }
+
+            if (isPdfUrl(urlStr)) {
+                window.postMessage({ type: 'PDF_URL_FOUND', url: urlStr, k: __t }, '*');
+            }
+        }
+        return originalOpen.apply(this, arguments);
+    };
+})();

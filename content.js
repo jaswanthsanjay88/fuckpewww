@@ -1,56 +1,10 @@
 (function () {
     'use strict';
 
-    const _0x0 = [
-        'script',
-        'inject.js',
-        'onload',
-        'remove',
-        'head',
-        'documentElement',
-        'appendChild',
-        'message',
-        'source',
-        'data',
-        'type',
-        'PDF_URL_FOUND',
-        'url',
-        'stealth-dl-btn',
-        'button',
-        'id',
-        'title',
-        'Download PDF',
-        'style',
-        'cssText',
-        'body',
-        'innerHTML',
-        'display',
-        'flex',
-        'onclick',
-        'DOWNLOAD',
-        'borderColor',
-        '#4ade80',
-        '#ffffff',
-        '#333333',
-        '#000000',
-        'transform',
-        'scale(1.1)',
-        'scale(1)',
-        'onmouseover',
-        'onmouseout',
-        'runtime',
-        'getURL',
-        'addEventListener',
-        'sendMessage',
-        'createElement',
-        'getElementById',
-        'window'
-    ];
-
-    const _0x1 = (i) => _0x0[i];
-    const _0x2 = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
-    const _0x3 = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    const _0x4 =
+    const CHECK_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    const DOWNLOAD_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    
+    const BUTTON_STYLE =
         'position: fixed !important;' +
         'bottom: 30px !important;' +
         'right: 30px !important;' +
@@ -68,74 +22,129 @@
         'transition: all 0.2s ease-in-out !important;' +
         'padding: 0 !important;' +
         'margin: 0 !important;';
-    const _0x7 = (() => {
+
+    const token = (() => {
         const a = new Uint32Array(4);
         crypto.getRandomValues(a);
         return Array.from(a).map((n) => n.toString(16)).join('-');
     })();
 
-    const _0x5 = (u) => {
-        let b = document[_0x1(41)](_0x1(13));
+    let currentPdfUrl = null;
 
-        if (!b) {
-            b = document[_0x1(40)](_0x1(14));
-            b[_0x1(15)] = _0x1(13);
-            b[_0x1(16)] = _0x1(17);
-            b[_0x1(18)][_0x1(19)] = _0x4;
-            b[_0x1(34)] = () => {
-                b[_0x1(18)].backgroundColor = _0x1(29);
-                b[_0x1(18)][_0x1(31)] = _0x1(32);
+    const showDownloadButton = (url) => {
+        if (!url) return;
+        currentPdfUrl = url;
+
+        let btn = document.getElementById('stealth-dl-btn');
+
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.id = 'stealth-dl-btn';
+            btn.title = 'Download PDF';
+            btn.style.cssText = BUTTON_STYLE;
+            
+            btn.onmouseover = () => {
+                btn.style.backgroundColor = '#333333';
+                btn.style.transform = 'scale(1.1)';
             };
-            b[_0x1(35)] = () => {
-                b[_0x1(18)].backgroundColor = _0x1(30);
-                b[_0x1(18)][_0x1(31)] = _0x1(33);
+            btn.onmouseout = () => {
+                btn.style.backgroundColor = '#000000';
+                btn.style.transform = 'scale(1)';
             };
-            document[_0x1(20)][_0x1(6)](b);
+            document.body.appendChild(btn);
         }
 
-        b[_0x1(21)] = _0x2;
-        b[_0x1(18)][_0x1(22)] = _0x1(23);
-        b[_0x1(24)] = () => {
-            chrome[_0x1(36)][_0x1(39)]({ type: _0x1(25), url: u }, () => {
-                if (chrome.runtime.lastError) {
-                    return;
-                }
-                b[_0x1(21)] = _0x3;
-                b[_0x1(18)][_0x1(26)] = _0x1(27);
+        btn.innerHTML = DOWNLOAD_ICON;
+        btn.style.display = 'flex';
+        
+        btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!currentPdfUrl) return;
+
+            chrome.runtime.sendMessage({ type: 'DOWNLOAD', url: currentPdfUrl }, () => {
+                if (chrome.runtime.lastError) return;
+                
+                btn.innerHTML = CHECK_ICON;
+                btn.style.borderColor = '#4ade80';
                 setTimeout(() => {
-                    b[_0x1(21)] = _0x2;
-                    b[_0x1(18)][_0x1(26)] = _0x1(28);
+                    btn.innerHTML = DOWNLOAD_ICON;
+                    btn.style.borderColor = '#ffffff';
                 }, 2000);
             });
         };
     };
 
-    const _0x6 = document[_0x1(40)](_0x1(0));
-    _0x6.src = chrome[_0x1(36)][_0x1(37)](_0x1(1));
-    _0x6.setAttribute('data-ext-token', _0x7);
-    _0x6[_0x1(2)] = function () {
-        this[_0x1(3)]();
-    };
-    (document[_0x1(4)] || document[_0x1(5)])[_0x1(6)](_0x6);
+    const scanDOMForPDFs = () => {
+        const isPdfUrl = (url) => {
+            if (typeof url !== 'string') return false;
+            const lower = url.toLowerCase();
+            return (lower.includes('storage.googleapis.com') || lower.includes('amazonaws.com')) && 
+                   lower.includes('.pdf') &&
+                   !lower.includes('api.paruluniversity.ac.in');
+        };
 
-    window[_0x1(38)](_0x1(7), function (e) {
-        if (e[_0x1(8)] !== window || !e[_0x1(9)]) {
+        document.querySelectorAll('iframe').forEach(el => {
+            try {
+                if (el.src && isPdfUrl(el.src)) showDownloadButton(el.src);
+            } catch (e) {}
+        });
+
+        document.querySelectorAll('embed').forEach(el => {
+            try {
+                if (el.src && isPdfUrl(el.src)) showDownloadButton(el.src);
+            } catch (e) {}
+        });
+
+        document.querySelectorAll('object').forEach(el => {
+            try {
+                if (el.data && isPdfUrl(el.data)) showDownloadButton(el.data);
+            } catch (e) {}
+        });
+
+        document.querySelectorAll('a').forEach(el => {
+            try {
+                if (el.href && isPdfUrl(el.href)) showDownloadButton(el.href);
+            } catch (e) {}
+        });
+    };
+
+    const injectScript = () => {
+        const script = document.createElement('script');
+        script.src = chrome.runtime.getURL('inject.js');
+        script.setAttribute('data-ext-token', token);
+        script.onload = function () {
+            this.remove();
+        };
+        (document.head || document.documentElement).appendChild(script);
+    };
+
+    injectScript();
+
+    window.addEventListener('message', function (e) {
+        if (e.source !== window || !e.data) {
             return;
         }
         if (
-            e[_0x1(9)][_0x1(10)] === _0x1(11) &&
-            e[_0x1(9)].k === _0x7 &&
-            typeof e[_0x1(9)][_0x1(12)] === 'string'
+            e.data.type === 'PDF_URL_FOUND' &&
+            e.data.k === token &&
+            typeof e.data.url === 'string'
         ) {
-            try {
-                const p = new URL(e[_0x1(9)][_0x1(12)]);
-                if (p.hostname !== 'storage.googleapis.com') {
-                    return;
-                }
-                _0x5(p.href);
-            } catch (_0x8) {
-                return;
-            }
+            showDownloadButton(e.data.url);
         }
     });
+
+    scanDOMForPDFs();
+    setInterval(scanDOMForPDFs, 1500);
+
+    const observer = new MutationObserver(() => {
+        scanDOMForPDFs();
+    });
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src', 'data', 'href']
+    });
+
 })();

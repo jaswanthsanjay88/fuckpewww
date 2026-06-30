@@ -13,13 +13,21 @@
   "host_permissions": [
     "*://*.paruluniversity.ac.in/*",
     "*://elearning.paruluniversity.ac.in/*",
+    "*://*.paruluniversity.online/*",
+    "*://lms.paruluniversity.online/*",
     "*://storage.googleapis.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.paruluniversity.ac.in/*", "*://elearning.paruluniversity.ac.in/*"],
+      "matches": [
+        "*://*.paruluniversity.ac.in/*",
+        "*://elearning.paruluniversity.ac.in/*",
+        "*://*.paruluniversity.online/*",
+        "*://lms.paruluniversity.online/*"
+      ],
       "js": ["content.js"],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [
