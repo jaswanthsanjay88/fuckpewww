@@ -1,65 +1,105 @@
-(function() {
+﻿(function () {
     'use strict';
 
-    // Get security token with a fallback in case document.currentScript is null
-    let __t = '';
-    if (document.currentScript) {
-        __t = document.currentScript.getAttribute('data-ext-token') || '';
-    } else {
-        const scr = document.querySelector('script[data-ext-token]');
-        if (scr) {
-            __t = scr.getAttribute('data-ext-token') || '';
-        }
+    let isDownloading = false;
+
+    function isAppLoaded() {
+        try {
+            const app = window.PDFViewerApplication;
+            if (app && (app.pdfDocument || (app.pagesCount && app.pagesCount > 0))) {
+                return true;
+            }
+        } catch (e) {}
+        return false;
     }
 
-    if (!__t) return;
+    function runDownload() {
+        if (isDownloading) {
+            console.log('[Fcuk-Pewww Inject] Download debounced in inject.js.');
+            return false;
+        }
+        isDownloading = true;
+        setTimeout(() => { isDownloading = false; }, 2500);
 
-    // Helper to determine if a URL is a Google Cloud Storage or AWS S3 PDF file
-    function isPdfUrl(url) {
-        if (typeof url !== 'string') return false;
-        const lower = url.toLowerCase();
-        return (lower.includes('storage.googleapis.com') || lower.includes('amazonaws.com')) && 
-               lower.includes('.pdf') && 
-               !lower.includes('api.paruluniversity.ac.in');
+        console.log('[Fcuk-Pewww Inject] Triggering download via PDFViewerApplication...');
+
+        // 1. Direct window.PDFViewerApplication on current window
+        try {
+            const app = window.PDFViewerApplication;
+            if (app) {
+                if (typeof app.downloadOrSave === 'function') {
+                    app.downloadOrSave();
+                    console.log('[Fcuk-Pewww Inject] Executed window.PDFViewerApplication.downloadOrSave()');
+                    window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                    return true;
+                }
+                if (typeof app.download === 'function') {
+                    app.download();
+                    console.log('[Fcuk-Pewww Inject] Executed window.PDFViewerApplication.download()');
+                    window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                    return true;
+                }
+            }
+        } catch (e) {
+            console.warn('[Fcuk-Pewww Inject] Error calling PDFViewerApplication:', e);
+        }
+
+        // 2. Check child iframes for PDFViewerApplication
+        try {
+            const iframes = document.querySelectorAll('iframe');
+            for (const frame of iframes) {
+                try {
+                    const frameApp = frame.contentWindow && frame.contentWindow.PDFViewerApplication;
+                    if (frameApp) {
+                        if (typeof frameApp.downloadOrSave === 'function') {
+                            frameApp.downloadOrSave();
+                            console.log('[Fcuk-Pewww Inject] Executed iframe PDFViewerApplication.downloadOrSave()');
+                            window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                            return true;
+                        }
+                        if (typeof frameApp.download === 'function') {
+                            frameApp.download();
+                            console.log('[Fcuk-Pewww Inject] Executed iframe PDFViewerApplication.download()');
+                            window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                            return true;
+                        }
+                    }
+                } catch (frameErr) {}
+            }
+        } catch (e) {}
+
+        // 3. Fallback: native toolbar buttons in DOM ONLY if app not present
+        try {
+            const btn = document.querySelector('#download, #secondaryDownload');
+            if (btn) {
+                btn.click();
+                console.log('[Fcuk-Pewww Inject] Clicked native toolbar download button.');
+                window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                return true;
+            }
+        } catch (e) {}
+
+        return false;
     }
 
-    // Intercept window.fetch
-    const originalFetch = window.fetch;
-    window.fetch = async function(...args) {
-        if (args[0]) {
-            let url = '';
-            if (typeof args[0] === 'string') {
-                url = args[0];
-            } else if (typeof args[0] === 'object' && args[0].url) {
-                url = args[0].url;
-            } else if (args[0].toString) {
-                url = args[0].toString();
-            }
-
-            if (isPdfUrl(url)) {
-                window.postMessage({ type: 'PDF_URL_FOUND', url: url, k: __t }, '*');
-            }
+    // Listen for download triggers from content script
+    window.addEventListener('message', function (e) {
+        if (e.source !== window || !e.data) return;
+        if (e.data.type === '__PEWWW_EXECUTE_DOWNLOAD__') {
+            runDownload();
+        } else if (e.data.type === '__PEWWW_CHECK_STATUS_REQ__') {
+            window.postMessage({
+                type: '__PEWWW_CHECK_STATUS_RES__',
+                isLoaded: isAppLoaded()
+            }, '*');
         }
-        return originalFetch.apply(this, args);
-    };
+    });
 
-    // Intercept XMLHttpRequest
-    const originalOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url) {
-        if (url) {
-            let urlStr = '';
-            if (typeof url === 'string') {
-                urlStr = url;
-            } else if (url && url.href) {
-                urlStr = url.href;
-            } else {
-                urlStr = url.toString();
-            }
-
-            if (isPdfUrl(urlStr)) {
-                window.postMessage({ type: 'PDF_URL_FOUND', url: urlStr, k: __t }, '*');
-            }
-        }
-        return originalOpen.apply(this, arguments);
-    };
+    // Announce initial status
+    try {
+        window.postMessage({
+            type: '__PEWWW_CHECK_STATUS_RES__',
+            isLoaded: isAppLoaded()
+        }, '*');
+    } catch (e) {}
 })();

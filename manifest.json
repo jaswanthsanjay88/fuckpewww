@@ -1,42 +1,43 @@
 {
   "manifest_version": 3,
-  "name": "Fcuk-Pewww",
-  "version": "1.2",
-  "description": "Automatically shows a download button when viewing PDFs.",
+  "name": "Fcuk-Pewww - Parul PDF Downloader",
+  "version": "2.5",
+  "description": "One-click Claude-styled PDF Downloader for Parul University eLearning.",
   "action": {
     "default_popup": "popup.html"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "permissions": [
-    "downloads",
-    "scripting"
+    "activeTab",
+    "scripting",
+    "downloads"
   ],
   "host_permissions": [
-    "*://*.paruluniversity.ac.in/*",
-    "*://elearning.paruluniversity.ac.in/*",
-    "*://*.paruluniversity.online/*",
-    "*://lms.paruluniversity.online/*",
-    "*://storage.googleapis.com/*"
+    "*://*/*"
   ],
   "content_scripts": [
     {
       "matches": [
         "*://*.paruluniversity.ac.in/*",
         "*://elearning.paruluniversity.ac.in/*",
-        "*://*.paruluniversity.online/*",
-        "*://lms.paruluniversity.online/*"
+        "*://*/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_end",
-      "all_frames": true
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["inject.js"],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "*://*.paruluniversity.ac.in/*",
+        "*://elearning.paruluniversity.ac.in/*",
+        "<all_urls>"
+      ]
     }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  }
+  ]
 }

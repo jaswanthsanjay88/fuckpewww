@@ -1,10 +1,152 @@
-<!DOCTYPE html>
-<html style="width: 200px; height: 100px; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; font-family: sans-serif; margin: 0; padding: 0;">
-    <head>
-        <meta charset="utf-8">
-    </head>
-    <body style="text-align: center; margin: 0;">
-        <p style="margin: 0; font-weight: bold;">Active</p>
-        <p style="font-size: 11px; color: #666; margin-top: 5px;">Button will appear on page.</p>
-    </body>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            width: 270px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            background: #1C1B18;
+            color: #FAF8F5;
+            -webkit-font-smoothing: antialiased;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 7px;
+            background: rgba(217, 119, 87, 0.16);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #D97757;
+        }
+        h2 {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #FAF8F5;
+            letter-spacing: -0.01em;
+        }
+        .kbd-hint {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 5px;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            color: #D4D4D8;
+        }
+        .status-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11.5px;
+            color: #A8A29E;
+        }
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #78716C;
+            transition: all 0.3s ease;
+        }
+        .status-dot.active {
+            background: #34D399;
+            box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+        }
+        #dlBtn {
+            width: 100%;
+            background: #D97757;
+            border: none;
+            color: #FFFFFF;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 14px rgba(217, 119, 87, 0.28);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #dlBtn:hover {
+            background: #C26243;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(217, 119, 87, 0.38);
+        }
+        #dlBtn:active {
+            transform: translateY(0);
+        }
+        #dlBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #34D399;
+            min-height: 14px;
+            text-align: center;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="brand">
+            <div class="logo-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </div>
+            <h2>Fcuk-Pewww</h2>
+        </div>
+        <span class="kbd-hint">Ctrl + S</span>
+    </div>
+
+    <div class="status-card">
+        <div id="statusDot" class="status-dot"></div>
+        <span id="statusText">Checking PDF status...</span>
+    </div>
+
+    <button id="dlBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Download Document
+    </button>
+
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+</body>
 </html>
