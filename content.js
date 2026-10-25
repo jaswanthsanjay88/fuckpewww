@@ -4,15 +4,73 @@
     let lastDownloadTime = 0;
     let childFrameHasPdf = false;
     let injectAppLoaded = false;
+    let currentFilename = null;
+
+    function cleanPdfFilename(raw) {
+        if (!raw || typeof raw !== 'string') return '';
+        let str = raw;
+        try { str = decodeURIComponent(decodeURIComponent(str)); } catch (e) {}
+        let name = str.split('?')[0].split('/').pop();
+        name = name.replace(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[-_]?/, '');
+        name = name.replace(/^[0-9a-fA-F]{32}[-_]?/, '');
+        name = name.replace(/^\d{10,}[-_]?/, '');
+        name = name.replace(/[\\/:*?"<>|]/g, '-').trim();
+        if (name && !name.toLowerCase().endsWith('.pdf')) name += '.pdf';
+        return name;
+    }
+
+    function extractPageTitle() {
+        try {
+            const elements = Array.from(document.querySelectorAll('span, div, h1, h2, h3, h4, p, b, strong, a'));
+            for (let i = 0; i < elements.length; i++) {
+                const txt = elements[i].innerText ? elements[i].innerText.trim() : '';
+                if (txt.match(/^(UNIT|Chapter|Lecture|Tutorial|Assignment)\s*[-_]?\s*\d+/i)) {
+                    let clean = txt.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+                    return clean;
+                }
+            }
+
+            const breadcrumbs = document.querySelectorAll('.breadcrumb-item, [class*="breadcrumb"], .subject-name');
+            if (breadcrumbs.length > 0) {
+                const last = breadcrumbs[breadcrumbs.length - 1].innerText ? breadcrumbs[breadcrumbs.length - 1].innerText.trim() : '';
+                if (last && last.length > 2 && !last.includes('Subjects')) {
+                    let clean = last.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+                    return clean;
+                }
+            }
+
+            const headings = document.querySelectorAll('h1, h2, h3, .title, [class*="title"]');
+            for (let i = 0; i < headings.length; i++) {
+                const txt = headings[i].innerText ? headings[i].innerText.trim() : '';
+                if (txt && txt.length > 2 && txt.length < 60 && !txt.includes('\n')) {
+                    let clean = txt.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+                    return clean;
+                }
+            }
+        } catch (e) {}
+
+        if (document.title && document.title.trim().length > 1) {
+            let clean = document.title.trim().replace(/[\\/:*?"<>|]/g, '-');
+            if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+            return clean;
+        }
+
+        return 'Parul-Document.pdf';
+    }
 
     // Listen for messages from inject.js and child iframes
     window.addEventListener('message', function (e) {
         if (!e.data) return;
         if (e.data.type === '__PEWWW_CHECK_STATUS_RES__') {
             injectAppLoaded = !!e.data.isLoaded;
+            if (e.data.filename) currentFilename = e.data.filename;
             updateVisibility();
         } else if (e.data.type === '__PEWWW_CHILD_PDF_STATE__') {
             childFrameHasPdf = !!e.data.isOpen;
+            if (e.data.filename) currentFilename = e.data.filename;
             updateVisibility();
         } else if (e.data.type === '__PEWWW_KEY_TRIGGER__') {
             if (isPdfOpen()) {
@@ -20,6 +78,7 @@
             }
         } else if (e.data.type === '__PEWWW_DOWNLOAD_SUCCESS__' || e.data.type === '__PEWWW_DOCUMENT_LOADED__') {
             injectAppLoaded = true;
+            if (e.data.filename) currentFilename = e.data.filename;
             updateVisibility();
             if (e.data.type === '__PEWWW_DOWNLOAD_SUCCESS__') {
                 showFeedbackToast();
@@ -27,7 +86,6 @@
         }
     });
 
-    // Clean up any legacy or duplicate buttons
     function cleanupOldButtons() {
         const obsoleteIds = [
             'fcuk-pewww-top-btn',
@@ -44,7 +102,6 @@
         });
     }
 
-    // Inject external inject.js via script.src (100% CSP compliant)
     function injectExternalScript() {
         if (document.getElementById('pewww-ext-script')) return;
         try {
@@ -55,12 +112,13 @@
         } catch (e) {}
     }
 
-    // Robust check: Is a PDF document or viewer actively open and visible right now?
     function isPdfOpen() {
-        // A. Inject script / child frame confirmation
+        if (!currentFilename) {
+            currentFilename = extractPageTitle();
+        }
+
         if (childFrameHasPdf || injectAppLoaded) return true;
 
-        // B. Check for core PDF viewer elements in DOM
         const viewerSelectors = [
             'pdf-viewer',
             'ngx-extended-pdf-viewer',
@@ -77,12 +135,16 @@
             if (el) {
                 const style = window.getComputedStyle(el);
                 if (style.display !== 'none' && style.visibility !== 'hidden') {
+                    const src = el.getAttribute('ng-reflect-src') || el.getAttribute('src');
+                    if (src) {
+                        const extracted = cleanPdfFilename(src);
+                        if (extracted && extracted.length > 4) currentFilename = extracted;
+                    }
                     return true;
                 }
             }
         }
 
-        // C. Check for rendered PDF page canvases
         const canvases = document.querySelectorAll('pdf-viewer canvas, .pdfViewer canvas, #viewerContainer canvas, div[class*="viewer"] canvas, div[class*="pdf"] canvas');
         if (canvases.length > 0) {
             for (const c of canvases) {
@@ -90,7 +152,6 @@
             }
         }
 
-        // D. Check for PDF indicator in URL or classroom viewer view
         const path = window.location.href.toLowerCase();
         if (path.includes('classrooms') || path.includes('subjects') || path.includes('elearning')) {
             const anyCanvas = document.querySelectorAll('canvas');
@@ -102,7 +163,6 @@
             }
         }
 
-        // E. Check visible iframes
         const iframes = document.querySelectorAll('iframe');
         for (const frame of iframes) {
             try {
@@ -121,26 +181,23 @@
         return false;
     }
 
-    // Single coordinated download trigger with 2000ms debounce
     function triggerDownload() {
         const now = Date.now();
         if (now - lastDownloadTime < 2000) return;
         lastDownloadTime = now;
 
+        const filename = currentFilename || extractPageTitle();
         showFeedbackToast();
 
-        // 1. Direct message to inject.js
         try {
-            window.postMessage({ type: '__PEWWW_EXECUTE_DOWNLOAD__' }, '*');
+            window.postMessage({ type: '__PEWWW_EXECUTE_DOWNLOAD__', filename: filename }, '*');
         } catch (e) {}
 
-        // 2. Coordinated background execution in MAIN world
         try {
-            chrome.runtime.sendMessage({ type: 'EXECUTE_MAIN_WORLD_DOWNLOAD' });
+            chrome.runtime.sendMessage({ type: 'EXECUTE_MAIN_WORLD_DOWNLOAD', filename: filename });
         } catch (err) {}
     }
 
-    // Keyboard shortcut handler (Ctrl+S / Cmd+S / Alt+D)
     function handleKeyShortcut(e) {
         const isCtrlOrCmd = e.ctrlKey || e.metaKey;
         const isS = e.code === 'KeyS' || (e.key && e.key.toLowerCase() === 's');
@@ -183,7 +240,11 @@
         function checkFramePdf() {
             try {
                 const hasPdf = isPdfOpen();
-                window.top.postMessage({ type: '__PEWWW_CHILD_PDF_STATE__', isOpen: hasPdf }, '*');
+                window.top.postMessage({
+                    type: '__PEWWW_CHILD_PDF_STATE__',
+                    isOpen: hasPdf,
+                    filename: currentFilename || extractPageTitle()
+                }, '*');
             } catch (e) {}
         }
         setInterval(checkFramePdf, 800);
@@ -191,9 +252,9 @@
         return;
     }
 
-    // UI Pill & Feedback Toast
     function showFeedbackToast() {
         let toast = document.getElementById('claude-pdf-toast');
+        const displayName = currentFilename || 'document.pdf';
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'claude-pdf-toast';
@@ -221,15 +282,17 @@
                 visibility: hidden !important;
                 transform: translateY(8px) !important;
                 pointer-events: none !important;
-            `;
-            toast.innerHTML = `
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                <span>Downloading document...</span>
+                max-width: 320px !important;
             `;
             (document.body || document.documentElement).appendChild(toast);
         }
+
+        toast.innerHTML = `
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Saving ${displayName}...</span>
+        `;
 
         toast.style.visibility = 'visible';
         toast.style.opacity = '1';
@@ -253,7 +316,7 @@
         const iconBox = document.getElementById('claude-pill-icon-box');
 
         if (text && iconBox) {
-            text.textContent = 'Downloading...';
+            text.textContent = 'Saving...';
             text.style.color = '#34D399';
             iconBox.innerHTML = `
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
@@ -277,7 +340,6 @@
         }
     }
 
-    // Claude-style Floating Capsule
     function getOrCreateClaudePill() {
         let pill = document.getElementById('claude-pdf-pill');
         if (pill) return pill;
@@ -339,7 +401,7 @@
             gap: 12px !important;
             cursor: pointer !important;
             box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(217, 119, 87, 0.12) !important;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
             user-select: none !important;
             opacity: 0 !important;
             visibility: hidden !important;
@@ -354,6 +416,9 @@
             pill.style.boxShadow = '0 16px 36px -4px rgba(0, 0, 0, 0.6), 0 0 20px rgba(217, 119, 87, 0.25)';
             const iconBox = document.getElementById('claude-pill-icon-box');
             if (iconBox) iconBox.style.background = 'rgba(217, 119, 87, 0.25)';
+            if (currentFilename) {
+                pill.title = 'Download: ' + currentFilename;
+            }
         };
 
         pill.onmouseleave = () => {
@@ -389,6 +454,9 @@
             pill.style.opacity = '1';
             pill.style.transform = 'translateY(0)';
             pill.style.pointerEvents = 'auto';
+            if (currentFilename) {
+                pill.title = 'Download: ' + currentFilename;
+            }
         } else {
             pill.style.opacity = '0';
             pill.style.transform = 'translateY(16px)';
@@ -420,9 +488,12 @@
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.type === 'TRIGGER_DOWNLOAD') {
             triggerDownload();
-            sendResponse({ success: true });
+            sendResponse({ success: true, filename: currentFilename });
         } else if (request.type === 'CHECK_PDF_STATUS') {
-            sendResponse({ isOpen: isPdfOpen() });
+            sendResponse({
+                isOpen: isPdfOpen(),
+                filename: currentFilename || extractPageTitle()
+            });
         }
     });
 })();

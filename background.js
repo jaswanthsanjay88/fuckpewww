@@ -1,6 +1,6 @@
 const lastDownloadTimes = new Map();
 
-async function executeSingleDownload(tabId) {
+async function executeSingleDownload(tabId, customFilename) {
     const now = Date.now();
     const lastTime = lastDownloadTimes.get(tabId) || 0;
     if (now - lastTime < 2000) {
@@ -8,16 +8,19 @@ async function executeSingleDownload(tabId) {
     }
     lastDownloadTimes.set(tabId, now);
 
+    const safeFilename = (customFilename && customFilename.trim()) || 'Parul-Document.pdf';
+
     try {
         const results = await chrome.scripting.executeScript({
             target: { tabId: tabId, allFrames: true },
             world: 'MAIN',
-            func: async () => {
-                function triggerBlob(blob, filename) {
+            args: [safeFilename],
+            func: async (preferredFilename) => {
+                function triggerBlob(blob, name) {
                     const blobUrl = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
-                    a.download = filename || 'Parul-Course-Material.pdf';
+                    a.download = name;
                     document.body.appendChild(a);
                     a.click();
                     setTimeout(() => {
@@ -26,9 +29,11 @@ async function executeSingleDownload(tabId) {
                     }, 15000);
                 }
 
+                const filename = window.__PEWWW_PDF_NAME__ || preferredFilename || 'Parul-Document.pdf';
+
                 // 1. Captured PDF Blob
                 if (window.__PEWWW_CURRENT_PDF_BLOB__) {
-                    triggerBlob(window.__PEWWW_CURRENT_PDF_BLOB__, 'Parul-Course-Material.pdf');
+                    triggerBlob(window.__PEWWW_CURRENT_PDF_BLOB__, filename);
                     return true;
                 }
 
@@ -37,7 +42,7 @@ async function executeSingleDownload(tabId) {
                     try {
                         const data = await window.__PEWWW_PDF_DOC__.getData();
                         if (data && data.length > 0) {
-                            triggerBlob(new Blob([data], { type: 'application/pdf' }), 'Parul-Course-Material.pdf');
+                            triggerBlob(new Blob([data], { type: 'application/pdf' }), filename);
                             return true;
                         }
                     } catch (e) {}
@@ -50,7 +55,7 @@ async function executeSingleDownload(tabId) {
                         try {
                             const data = await app.pdfDocument.getData();
                             if (data && data.length > 0) {
-                                triggerBlob(new Blob([data], { type: 'application/pdf' }), 'Parul-Course-Material.pdf');
+                                triggerBlob(new Blob([data], { type: 'application/pdf' }), filename);
                                 return true;
                             }
                         } catch (e) {}
@@ -74,7 +79,7 @@ async function executeSingleDownload(tabId) {
                         if (pdf && typeof pdf.getData === 'function') {
                             const data = await pdf.getData();
                             if (data && data.length > 0) {
-                                triggerBlob(new Blob([data], { type: 'application/pdf' }), 'Parul-Course-Material.pdf');
+                                triggerBlob(new Blob([data], { type: 'application/pdf' }), filename);
                                 return true;
                             }
                         }
@@ -92,7 +97,7 @@ async function executeSingleDownload(tabId) {
                 if (window.__PEWWW_CURRENT_PDF_URL__) {
                     const a = document.createElement('a');
                     a.href = window.__PEWWW_CURRENT_PDF_URL__;
-                    a.download = 'Parul-Course-Material.pdf';
+                    a.download = filename;
                     a.target = '_blank';
                     document.body.appendChild(a);
                     a.click();
@@ -125,7 +130,7 @@ async function executeSingleDownload(tabId) {
             if (perfResults && perfResults[0] && perfResults[0].result) {
                 chrome.downloads.download({
                     url: perfResults[0].result,
-                    filename: 'Parul-Course-Material.pdf',
+                    filename: safeFilename,
                     conflictAction: 'uniquify'
                 });
                 return { success: true };
@@ -142,7 +147,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'EXECUTE_MAIN_WORLD_DOWNLOAD' || message.type === 'TRIGGER_SINGLE_DOWNLOAD') {
         const tabId = (sender.tab && sender.tab.id) || message.tabId;
         if (tabId) {
-            executeSingleDownload(tabId).then((res) => {
+            executeSingleDownload(tabId, message.filename).then((res) => {
                 sendResponse(res);
             });
             return true;
@@ -150,7 +155,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === 'DOWNLOAD' && message.url) {
-        let filename = message.filename || 'Parul-Course-Material.pdf';
+        let filename = message.filename || 'Parul-Document.pdf';
         filename = filename.replace(/[\\/:*?"<>|]/g, '-').trim();
         if (!filename.toLowerCase().endsWith('.pdf')) filename += '.pdf';
 

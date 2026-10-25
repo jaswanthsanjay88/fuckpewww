@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -46,8 +46,8 @@
         .kbd-hint {
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 5px;
-            padding: 2px 6px;
+            border-radius: 50px;
+            padding: 2px 7px;
             font-size: 10px;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             color: #D4D4D8;
@@ -57,7 +57,7 @@
             border: 1px solid rgba(255, 255, 255, 0.07);
             border-radius: 8px;
             padding: 8px 12px;
-            margin-bottom: 14px;
+            margin-bottom: 10px;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -70,10 +70,27 @@
             border-radius: 50%;
             background: #78716C;
             transition: all 0.3s ease;
+            flex-shrink: 0;
         }
         .status-dot.active {
             background: #34D399;
             box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+        }
+        .file-card {
+            display: none;
+            background: rgba(217, 119, 87, 0.08);
+            border: 1px solid rgba(217, 119, 87, 0.22);
+            border-radius: 8px;
+            padding: 7px 10px;
+            margin-bottom: 12px;
+            font-size: 11px;
+            color: #FAF8F5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .file-card span.icon {
+            margin-right: 5px;
         }
         #dlBtn {
             width: 100%;
@@ -100,19 +117,12 @@
         #dlBtn:active {
             transform: translateY(0);
         }
-        #dlBtn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
         #status {
             margin-top: 10px;
-            font-size: 11px;
-            color: #34D399;
-            min-height: 14px;
+            font-size: 11.5px;
             text-align: center;
             font-weight: 500;
+            min-height: 16px;
         }
     </style>
 </head>
@@ -134,6 +144,11 @@
     <div class="status-card">
         <div id="statusDot" class="status-dot"></div>
         <span id="statusText">Checking PDF status...</span>
+    </div>
+
+    <div id="fileCard" class="file-card">
+        <span class="icon">📄</span>
+        <span id="fileName">document.pdf</span>
     </div>
 
     <button id="dlBtn">

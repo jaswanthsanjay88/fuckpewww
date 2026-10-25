@@ -6,36 +6,89 @@
     window.__PEWWW_CURRENT_PDF_BLOB__ = null;
     window.__PEWWW_CURRENT_PDF_URL__ = null;
     window.__PEWWW_PDF_DOC__ = null;
+    window.__PEWWW_PDF_NAME__ = null;
 
-    function getCleanFilename(rawName) {
-        if (!rawName || typeof rawName !== 'string') return '';
-        let clean = rawName.split('/').pop().split('?')[0].replace(/[\\/:*?"<>|]/g, '-').trim();
-        if (clean && !clean.toLowerCase().endsWith('.pdf')) {
-            clean += '.pdf';
+    function cleanPdfFilename(raw) {
+        if (!raw || typeof raw !== 'string') return '';
+        let str = raw;
+        try { str = decodeURIComponent(decodeURIComponent(str)); } catch (e) {}
+
+        let name = str.split('?')[0].split('/').pop();
+        // Remove standard UUID prefix: 8e2a9301-e70f-42aa-81dd-200bada983aa-
+        name = name.replace(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[-_]?/, '');
+        // Remove 32-character hash prefix or timestamp prefix
+        name = name.replace(/^[0-9a-fA-F]{32}[-_]?/, '');
+        name = name.replace(/^\d{10,}[-_]?/, '');
+        name = name.replace(/[\\/:*?"<>|]/g, '-').trim();
+
+        if (name && !name.toLowerCase().endsWith('.pdf')) {
+            name += '.pdf';
         }
-        return clean;
+        return name;
     }
 
     function getPageFallbackTitle() {
-        const selectors = [
-            '.unit-title',
-            '.chapter-title',
-            '.subject-name',
-            '.breadcrumb-item.active',
-            '.pdf-title',
-            'h1', 'h2', 'h3',
-            '.page-title'
-        ];
-        for (let i = 0; i < selectors.length; i++) {
-            const el = document.querySelector(selectors[i]);
-            if (el && el.innerText && el.innerText.trim().length > 1) {
-                return getCleanFilename(el.innerText.trim());
+        try {
+            // Check for UNIT / Chapter / Tutorial near the Back button
+            const elements = Array.from(document.querySelectorAll('span, div, h1, h2, h3, h4, p, b, strong, a'));
+            for (let i = 0; i < elements.length; i++) {
+                const txt = elements[i].innerText ? elements[i].innerText.trim() : '';
+                if (txt.match(/^(UNIT|Chapter|Lecture|Tutorial|Assignment)\s*[-_]?\s*\d+/i)) {
+                    let clean = txt.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+                    return clean;
+                }
+            }
+
+            // Check breadcrumb
+            const breadcrumbs = document.querySelectorAll('.breadcrumb-item, [class*="breadcrumb"], .subject-name');
+            if (breadcrumbs.length > 0) {
+                const last = breadcrumbs[breadcrumbs.length - 1].innerText ? breadcrumbs[breadcrumbs.length - 1].innerText.trim() : '';
+                if (last && last.length > 2 && !last.includes('Subjects')) {
+                    let clean = last.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+                    return clean;
+                }
+            }
+
+            // Check headings
+            const headings = document.querySelectorAll('h1, h2, h3, .title, [class*="title"]');
+            for (let i = 0; i < headings.length; i++) {
+                const txt = headings[i].innerText ? headings[i].innerText.trim() : '';
+                if (txt && txt.length > 2 && txt.length < 60 && !txt.includes('\n')) {
+                    let clean = txt.replace(/[\\/:*?"<>|]/g, '-').trim();
+                    if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+                    return clean;
+                }
+            }
+        } catch (e) {}
+
+        if (document.title && document.title.trim().length > 1) {
+            let clean = document.title.trim().replace(/[\\/:*?"<>|]/g, '-');
+            if (!clean.toLowerCase().endsWith('.pdf')) clean += '.pdf';
+            return clean;
+        }
+
+        return 'Parul-Document.pdf';
+    }
+
+    function determineFilename(candidateUrl, doc) {
+        if (candidateUrl) {
+            const urlName = cleanPdfFilename(candidateUrl);
+            if (urlName && urlName.length > 4 && urlName.toLowerCase() !== '.pdf' && !urlName.toLowerCase().startsWith('parul-')) {
+                return urlName;
             }
         }
-        if (document.title && document.title.trim().length > 1) {
-            return getCleanFilename(document.title.trim());
+
+        if (doc && doc.metadata && doc.metadata.info && doc.metadata.info.Title) {
+            let title = doc.metadata.info.Title.replace(/[\\/:*?"<>|]/g, '-').trim();
+            if (title.length > 2) {
+                if (!title.toLowerCase().endsWith('.pdf')) title += '.pdf';
+                return title;
+            }
         }
-        return 'Parul-Course-Material.pdf';
+
+        return getPageFallbackTitle();
     }
 
     function markPdfReady(url, blob, doc) {
@@ -49,16 +102,23 @@
         if (doc && !window.__PEWWW_PDF_DOC__) {
             window.__PEWWW_PDF_DOC__ = doc;
         }
+
+        const resolvedName = determineFilename(window.__PEWWW_CURRENT_PDF_URL__ || url, window.__PEWWW_PDF_DOC__ || doc);
+        if (resolvedName) {
+            window.__PEWWW_PDF_NAME__ = resolvedName;
+        }
+
         try {
             window.postMessage({
                 type: '__PEWWW_CHECK_STATUS_RES__',
                 isLoaded: true,
-                url: window.__PEWWW_CURRENT_PDF_URL__
+                url: window.__PEWWW_CURRENT_PDF_URL__,
+                filename: window.__PEWWW_PDF_NAME__
             }, '*');
         } catch (e) {}
     }
 
-    // 1. Hook window.fetch to capture PDF stream, blob, or signed URLs
+    // 1. Hook window.fetch
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {
         let urlStr = '';
@@ -189,7 +249,7 @@
         });
     } catch (e) {}
 
-    // 4. Hook PDFViewerApplication (for ngx-extended-pdf-viewer)
+    // 4. Hook PDFViewerApplication
     function hookViewerApp() {
         const app = window.PDFViewerApplication;
         if (!app) return false;
@@ -218,7 +278,6 @@
     setInterval(() => {
         hookViewerApp();
 
-        // Check ng2-pdf-viewer or custom Angular component
         const viewerEl = document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container');
         if (viewerEl) {
             const reflectSrc = viewerEl.getAttribute('ng-reflect-src') || viewerEl.getAttribute('src');
@@ -245,7 +304,7 @@
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = filename || getPageFallbackTitle();
+        a.download = filename || window.__PEWWW_PDF_NAME__ || getPageFallbackTitle();
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
@@ -260,7 +319,7 @@
         isDownloading = true;
         setTimeout(() => { isDownloading = false; }, 2000);
 
-        const filename = getPageFallbackTitle();
+        const filename = window.__PEWWW_PDF_NAME__ || determineFilename(window.__PEWWW_CURRENT_PDF_URL__, window.__PEWWW_PDF_DOC__);
 
         // Strategy 1: Captured PDF Blob in memory
         if (window.__PEWWW_CURRENT_PDF_BLOB__) {
@@ -268,7 +327,7 @@
             return true;
         }
 
-        // Strategy 2: PDFDocumentProxy from pdfjsLib or ng2-pdf-viewer
+        // Strategy 2: PDFDocumentProxy
         const activeDoc = window.__PEWWW_PDF_DOC__ || (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument);
         if (activeDoc && typeof activeDoc.getData === 'function') {
             try {
@@ -349,7 +408,8 @@
         } else if (e.data.type === '__PEWWW_CHECK_STATUS_REQ__') {
             window.postMessage({
                 type: '__PEWWW_CHECK_STATUS_RES__',
-                isLoaded: window.__PEWWW_HAS_PDF__ || !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container')
+                isLoaded: window.__PEWWW_HAS_PDF__ || !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container'),
+                filename: window.__PEWWW_PDF_NAME__
             }, '*');
         }
     });
@@ -357,7 +417,8 @@
     try {
         window.postMessage({
             type: '__PEWWW_CHECK_STATUS_RES__',
-            isLoaded: !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container')
+            isLoaded: !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container'),
+            filename: window.__PEWWW_PDF_NAME__
         }, '*');
     } catch (e) {}
 })();
