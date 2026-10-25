@@ -3,7 +3,7 @@ const lastDownloadTimes = new Map();
 async function executeSingleDownload(tabId, customFilename) {
     const now = Date.now();
     const lastTime = lastDownloadTimes.get(tabId) || 0;
-    if (now - lastTime < 2000) {
+    if (now - lastTime < 2500) {
         return { success: true, debounced: true };
     }
     lastDownloadTimes.set(tabId, now);
@@ -86,14 +86,7 @@ async function executeSingleDownload(tabId, customFilename) {
                     } catch (e) {}
                 }
 
-                // 5. Toolbar download button
-                const btn = document.querySelector('#download, #secondaryDownload');
-                if (btn) {
-                    btn.click();
-                    return true;
-                }
-
-                // 6. Direct PDF URL
+                // 5. Direct PDF URL
                 if (window.__PEWWW_CURRENT_PDF_URL__) {
                     const a = document.createElement('a');
                     a.href = window.__PEWWW_CURRENT_PDF_URL__;
@@ -109,32 +102,34 @@ async function executeSingleDownload(tabId, customFilename) {
             }
         });
 
+        if (results && results.some(r => r && r.result === true)) {
+            return { success: true };
+        }
+
         // Fallback: check performance resource entries
-        if (!results || !results.some(r => r && r.result === true)) {
-            const perfResults = await chrome.scripting.executeScript({
-                target: { tabId: tabId },
-                world: 'MAIN',
-                func: () => {
-                    try {
-                        const resources = performance.getEntriesByType('resource');
-                        for (let i = resources.length - 1; i >= 0; i--) {
-                            const name = resources[i].name || '';
-                            if (name.includes('.pdf') || (name.includes('storage.googleapis.com') && name.includes('parul'))) {
-                                return name;
-                            }
+        const perfResults = await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            world: 'MAIN',
+            func: () => {
+                try {
+                    const resources = performance.getEntriesByType('resource');
+                    for (let i = resources.length - 1; i >= 0; i--) {
+                        const name = resources[i].name || '';
+                        if (name.includes('.pdf') || (name.includes('storage.googleapis.com') && name.includes('parul'))) {
+                            return name;
                         }
-                    } catch (e) {}
-                    return null;
-                }
-            });
-            if (perfResults && perfResults[0] && perfResults[0].result) {
-                chrome.downloads.download({
-                    url: perfResults[0].result,
-                    filename: safeFilename,
-                    conflictAction: 'uniquify'
-                });
-                return { success: true };
+                    }
+                } catch (e) {}
+                return null;
             }
+        });
+        if (perfResults && perfResults[0] && perfResults[0].result) {
+            chrome.downloads.download({
+                url: perfResults[0].result,
+                filename: safeFilename,
+                conflictAction: 'uniquify'
+            });
+            return { success: true };
         }
 
         return { success: true };

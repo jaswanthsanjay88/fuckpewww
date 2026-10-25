@@ -14,9 +14,7 @@
         try { str = decodeURIComponent(decodeURIComponent(str)); } catch (e) {}
 
         let name = str.split('?')[0].split('/').pop();
-        // Remove standard UUID prefix: 8e2a9301-e70f-42aa-81dd-200bada983aa-
         name = name.replace(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[-_]?/, '');
-        // Remove 32-character hash prefix or timestamp prefix
         name = name.replace(/^[0-9a-fA-F]{32}[-_]?/, '');
         name = name.replace(/^\d{10,}[-_]?/, '');
         name = name.replace(/[\\/:*?"<>|]/g, '-').trim();
@@ -27,9 +25,8 @@
         return name;
     }
 
-    function getPageFallbackTitle() {
+    function getLivePageTitle() {
         try {
-            // Check for UNIT / Chapter / Tutorial near the Back button
             const elements = Array.from(document.querySelectorAll('span, div, h1, h2, h3, h4, p, b, strong, a'));
             for (let i = 0; i < elements.length; i++) {
                 const txt = elements[i].innerText ? elements[i].innerText.trim() : '';
@@ -40,7 +37,6 @@
                 }
             }
 
-            // Check breadcrumb
             const breadcrumbs = document.querySelectorAll('.breadcrumb-item, [class*="breadcrumb"], .subject-name');
             if (breadcrumbs.length > 0) {
                 const last = breadcrumbs[breadcrumbs.length - 1].innerText ? breadcrumbs[breadcrumbs.length - 1].innerText.trim() : '';
@@ -51,7 +47,6 @@
                 }
             }
 
-            // Check headings
             const headings = document.querySelectorAll('h1, h2, h3, .title, [class*="title"]');
             for (let i = 0; i < headings.length; i++) {
                 const txt = headings[i].innerText ? headings[i].innerText.trim() : '';
@@ -88,25 +83,32 @@
             }
         }
 
-        return getPageFallbackTitle();
+        return getLivePageTitle();
+    }
+
+    function resetPdfState() {
+        window.__PEWWW_CURRENT_PDF_BLOB__ = null;
+        window.__PEWWW_CURRENT_PDF_URL__ = null;
+        window.__PEWWW_PDF_DOC__ = null;
+        window.__PEWWW_PDF_NAME__ = null;
+        window.__PEWWW_HAS_PDF__ = false;
     }
 
     function markPdfReady(url, blob, doc) {
         window.__PEWWW_HAS_PDF__ = true;
-        if (url && !window.__PEWWW_CURRENT_PDF_URL__) {
+
+        if (url && url !== window.__PEWWW_CURRENT_PDF_URL__) {
             window.__PEWWW_CURRENT_PDF_URL__ = url;
+            window.__PEWWW_CURRENT_PDF_BLOB__ = null; // New URL means old blob is obsolete
         }
-        if (blob && !window.__PEWWW_CURRENT_PDF_BLOB__) {
+        if (blob) {
             window.__PEWWW_CURRENT_PDF_BLOB__ = blob;
         }
-        if (doc && !window.__PEWWW_PDF_DOC__) {
+        if (doc) {
             window.__PEWWW_PDF_DOC__ = doc;
         }
 
-        const resolvedName = determineFilename(window.__PEWWW_CURRENT_PDF_URL__ || url, window.__PEWWW_PDF_DOC__ || doc);
-        if (resolvedName) {
-            window.__PEWWW_PDF_NAME__ = resolvedName;
-        }
+        window.__PEWWW_PDF_NAME__ = determineFilename(window.__PEWWW_CURRENT_PDF_URL__, window.__PEWWW_PDF_DOC__);
 
         try {
             window.postMessage({
@@ -117,6 +119,28 @@
             }, '*');
         } catch (e) {}
     }
+
+    // Reset when user navigates between slides / chapters / units
+    document.addEventListener('click', function (e) {
+        const target = e.target && e.target.closest('button, a, [role="button"], li, mat-list-item');
+        if (target) {
+            const txt = (target.innerText || '').toLowerCase();
+            if (
+                txt.includes('next') ||
+                txt.includes('prev') ||
+                txt.includes('unit') ||
+                txt.includes('chapter') ||
+                txt.includes('tutorial') ||
+                txt.includes('assignment') ||
+                txt.includes('back')
+            ) {
+                resetPdfState();
+            }
+        }
+    }, true);
+
+    window.addEventListener('popstate', resetPdfState);
+    window.addEventListener('hashchange', resetPdfState);
 
     // 1. Hook window.fetch
     const originalFetch = window.fetch;
@@ -304,7 +328,7 @@
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = filename || window.__PEWWW_PDF_NAME__ || getPageFallbackTitle();
+        a.download = filename || window.__PEWWW_PDF_NAME__ || getLivePageTitle();
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
@@ -314,12 +338,12 @@
         window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
     }
 
-    async function runDownload() {
+    async function runDownload(requestedFilename) {
         if (isDownloading) return false;
         isDownloading = true;
-        setTimeout(() => { isDownloading = false; }, 2000);
+        setTimeout(() => { isDownloading = false; }, 2500);
 
-        const filename = window.__PEWWW_PDF_NAME__ || determineFilename(window.__PEWWW_CURRENT_PDF_URL__, window.__PEWWW_PDF_DOC__);
+        const filename = requestedFilename || window.__PEWWW_PDF_NAME__ || determineFilename(window.__PEWWW_CURRENT_PDF_URL__, window.__PEWWW_PDF_DOC__);
 
         // Strategy 1: Captured PDF Blob in memory
         if (window.__PEWWW_CURRENT_PDF_BLOB__) {
@@ -404,12 +428,12 @@
     window.addEventListener('message', function (e) {
         if (!e.data) return;
         if (e.data.type === '__PEWWW_EXECUTE_DOWNLOAD__') {
-            runDownload();
+            runDownload(e.data.filename);
         } else if (e.data.type === '__PEWWW_CHECK_STATUS_REQ__') {
             window.postMessage({
                 type: '__PEWWW_CHECK_STATUS_RES__',
                 isLoaded: window.__PEWWW_HAS_PDF__ || !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container'),
-                filename: window.__PEWWW_PDF_NAME__
+                filename: window.__PEWWW_PDF_NAME__ || getLivePageTitle()
             }, '*');
         }
     });
@@ -418,7 +442,7 @@
         window.postMessage({
             type: '__PEWWW_CHECK_STATUS_RES__',
             isLoaded: !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container'),
-            filename: window.__PEWWW_PDF_NAME__
+            filename: window.__PEWWW_PDF_NAME__ || getLivePageTitle()
         }, '*');
     } catch (e) {}
 })();

@@ -2,6 +2,7 @@
     'use strict';
 
     let lastDownloadTime = 0;
+    let isExecutingDownload = false;
     let childFrameHasPdf = false;
     let injectAppLoaded = false;
     let currentFilename = null;
@@ -19,7 +20,7 @@
         return name;
     }
 
-    function extractPageTitle() {
+    function extractLivePageTitle() {
         try {
             const elements = Array.from(document.querySelectorAll('span, div, h1, h2, h3, h4, p, b, strong, a'));
             for (let i = 0; i < elements.length; i++) {
@@ -60,6 +61,35 @@
 
         return 'Parul-Document.pdf';
     }
+
+    // Reset when navigating
+    function resetNavState() {
+        currentFilename = null;
+        injectAppLoaded = false;
+        childFrameHasPdf = false;
+    }
+
+    document.addEventListener('click', function (e) {
+        const target = e.target && e.target.closest('button, a, [role="button"], li, mat-list-item');
+        if (target) {
+            const txt = (target.innerText || '').toLowerCase();
+            if (
+                txt.includes('next') ||
+                txt.includes('prev') ||
+                txt.includes('unit') ||
+                txt.includes('chapter') ||
+                txt.includes('tutorial') ||
+                txt.includes('assignment') ||
+                txt.includes('back')
+            ) {
+                resetNavState();
+                setTimeout(() => updateVisibility(), 300);
+            }
+        }
+    }, true);
+
+    window.addEventListener('popstate', resetNavState);
+    window.addEventListener('hashchange', resetNavState);
 
     // Listen for messages from inject.js and child iframes
     window.addEventListener('message', function (e) {
@@ -113,9 +143,7 @@
     }
 
     function isPdfOpen() {
-        if (!currentFilename) {
-            currentFilename = extractPageTitle();
-        }
+        currentFilename = extractLivePageTitle();
 
         if (childFrameHasPdf || injectAppLoaded) return true;
 
@@ -181,23 +209,31 @@
         return false;
     }
 
+    // STRICT SINGLE-DOWNLOAD PIPELINE
     function triggerDownload() {
         const now = Date.now();
-        if (now - lastDownloadTime < 2000) return;
+        if (now - lastDownloadTime < 2500 || isExecutingDownload) {
+            return;
+        }
         lastDownloadTime = now;
+        isExecutingDownload = true;
+        setTimeout(() => { isExecutingDownload = false; }, 2500);
 
-        const filename = currentFilename || extractPageTitle();
+        const filename = extractLivePageTitle();
+        currentFilename = filename;
+
         showFeedbackToast();
 
+        // 1. Primary: trigger in-page inject.js (zero duplicate)
         try {
-            window.postMessage({ type: '__PEWWW_EXECUTE_DOWNLOAD__', filename: filename }, '*');
+            window.postMessage({
+                type: '__PEWWW_EXECUTE_DOWNLOAD__',
+                filename: filename
+            }, '*');
         } catch (e) {}
-
-        try {
-            chrome.runtime.sendMessage({ type: 'EXECUTE_MAIN_WORLD_DOWNLOAD', filename: filename });
-        } catch (err) {}
     }
 
+    // Single capture listener on window
     function handleKeyShortcut(e) {
         const isCtrlOrCmd = e.ctrlKey || e.metaKey;
         const isS = e.code === 'KeyS' || (e.key && e.key.toLowerCase() === 's');
@@ -210,6 +246,11 @@
             e.stopPropagation();
             e.stopImmediatePropagation();
 
+            const now = Date.now();
+            if (now - lastDownloadTime < 2500 || isExecutingDownload) {
+                return;
+            }
+
             if (window.self !== window.top) {
                 window.top.postMessage({ type: '__PEWWW_KEY_TRIGGER__' }, '*');
             } else {
@@ -219,7 +260,6 @@
     }
 
     window.addEventListener('keydown', handleKeyShortcut, true);
-    document.addEventListener('keydown', handleKeyShortcut, true);
 
     function bindAllFrames() {
         document.querySelectorAll('iframe').forEach((frame) => {
@@ -227,14 +267,11 @@
                 if (frame.contentWindow && !frame.__pewww_bound__) {
                     frame.__pewww_bound__ = true;
                     frame.contentWindow.addEventListener('keydown', handleKeyShortcut, true);
-                    if (frame.contentDocument) {
-                        frame.contentDocument.addEventListener('keydown', handleKeyShortcut, true);
-                    }
                 }
             } catch (e) {}
         });
     }
-    setInterval(bindAllFrames, 1200);
+    setInterval(bindAllFrames, 1500);
 
     if (window.self !== window.top) {
         function checkFramePdf() {
@@ -243,7 +280,7 @@
                 window.top.postMessage({
                     type: '__PEWWW_CHILD_PDF_STATE__',
                     isOpen: hasPdf,
-                    filename: currentFilename || extractPageTitle()
+                    filename: extractLivePageTitle()
                 }, '*');
             } catch (e) {}
         }
@@ -254,7 +291,7 @@
 
     function showFeedbackToast() {
         let toast = document.getElementById('claude-pdf-toast');
-        const displayName = currentFilename || 'document.pdf';
+        const displayName = currentFilename || extractLivePageTitle();
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'claude-pdf-toast';
@@ -416,8 +453,9 @@
             pill.style.boxShadow = '0 16px 36px -4px rgba(0, 0, 0, 0.6), 0 0 20px rgba(217, 119, 87, 0.25)';
             const iconBox = document.getElementById('claude-pill-icon-box');
             if (iconBox) iconBox.style.background = 'rgba(217, 119, 87, 0.25)';
-            if (currentFilename) {
-                pill.title = 'Download: ' + currentFilename;
+            const liveName = extractLivePageTitle();
+            if (liveName) {
+                pill.title = 'Download: ' + liveName;
             }
         };
 
@@ -454,8 +492,9 @@
             pill.style.opacity = '1';
             pill.style.transform = 'translateY(0)';
             pill.style.pointerEvents = 'auto';
-            if (currentFilename) {
-                pill.title = 'Download: ' + currentFilename;
+            const liveName = extractLivePageTitle();
+            if (liveName) {
+                pill.title = 'Download: ' + liveName;
             }
         } else {
             pill.style.opacity = '0';
@@ -481,18 +520,16 @@
     });
 
     window.addEventListener('resize', updateVisibility);
-    window.addEventListener('popstate', updateVisibility);
-    window.addEventListener('hashchange', updateVisibility);
 
     // Extension popup message listener
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.type === 'TRIGGER_DOWNLOAD') {
             triggerDownload();
-            sendResponse({ success: true, filename: currentFilename });
+            sendResponse({ success: true, filename: extractLivePageTitle() });
         } else if (request.type === 'CHECK_PDF_STATUS') {
             sendResponse({
                 isOpen: isPdfOpen(),
-                filename: currentFilename || extractPageTitle()
+                filename: extractLivePageTitle()
             });
         }
     });
