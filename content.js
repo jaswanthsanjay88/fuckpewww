@@ -6,6 +6,12 @@
     let childFrameHasPdf = false;
     let injectAppLoaded = false;
     let currentFilename = null;
+    let isBatchRunning = false;
+    let batchCancelRequested = false;
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
     function cleanPdfFilename(raw) {
         if (!raw || typeof raw !== 'string') return '';
@@ -62,7 +68,57 @@
         return 'Parul-Document.pdf';
     }
 
-    // Reset when navigating
+    function findPaginationControls() {
+        let prevBtn = null;
+        let nextBtn = null;
+        let currentIdx = 1;
+        let totalCount = 1;
+
+        const allButtons = Array.from(document.querySelectorAll('button, a, [role="button"], span, div'));
+        for (const el of allButtons) {
+            const txt = (el.innerText || '').trim();
+            const match = txt.match(/^(\d+)\s*\/\s*(\d+)$/);
+            if (match && el.children.length === 0) {
+                currentIdx = parseInt(match[1], 10);
+                totalCount = parseInt(match[2], 10);
+
+                const parent = el.parentElement;
+                if (parent) {
+                    const siblings = Array.from(parent.querySelectorAll('button, a, [role="button"]'));
+                    for (const s of siblings) {
+                        const sTxt = (s.innerText || '').toLowerCase();
+                        if (sTxt.includes('prev')) prevBtn = s;
+                        if (sTxt.includes('next')) nextBtn = s;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (!nextBtn) {
+            nextBtn = allButtons.find(el => {
+                const txt = (el.innerText || '').trim().toLowerCase();
+                return (txt === 'next >' || txt === 'next' || txt.startsWith('next')) && (el.tagName === 'BUTTON' || el.tagName === 'A');
+            });
+        }
+
+        return { prevBtn, nextBtn, currentIdx, totalCount };
+    }
+
+    function findSidebarMaterials() {
+        const list = [];
+        const items = document.querySelectorAll(
+            '.mat-list-item, [class*="material-list"] [class*="item"], [class*="sidebar"] [class*="item"], [class*="content-item"], li[class*="item"]'
+        );
+        items.forEach(el => {
+            const txt = el.innerText ? el.innerText.trim() : '';
+            if (txt && !txt.includes('Show ') && (txt.includes('Tutorial') || txt.includes('Lecture') || txt.includes('UNIT') || txt.includes('Assignment') || txt.includes('NEW MATERIAL'))) {
+                list.push(el);
+            }
+        });
+        return list;
+    }
+
     function resetNavState() {
         currentFilename = null;
         injectAppLoaded = false;
@@ -91,7 +147,6 @@
     window.addEventListener('popstate', resetNavState);
     window.addEventListener('hashchange', resetNavState);
 
-    // Listen for messages from inject.js and child iframes
     window.addEventListener('message', function (e) {
         if (!e.data) return;
         if (e.data.type === '__PEWWW_CHECK_STATUS_RES__') {
@@ -209,22 +264,20 @@
         return false;
     }
 
-    // STRICT SINGLE-DOWNLOAD PIPELINE
     function triggerDownload() {
         const now = Date.now();
-        if (now - lastDownloadTime < 2500 || isExecutingDownload) {
+        if (now - lastDownloadTime < 1800 || isExecutingDownload) {
             return;
         }
         lastDownloadTime = now;
         isExecutingDownload = true;
-        setTimeout(() => { isExecutingDownload = false; }, 2500);
+        setTimeout(() => { isExecutingDownload = false; }, 1800);
 
         const filename = extractLivePageTitle();
         currentFilename = filename;
 
         showFeedbackToast();
 
-        // 1. Primary: trigger in-page inject.js (zero duplicate)
         try {
             window.postMessage({
                 type: '__PEWWW_EXECUTE_DOWNLOAD__',
@@ -233,7 +286,110 @@
         } catch (e) {}
     }
 
-    // Single capture listener on window
+    // AUTOMATED BATCH RUNNER: ALL SLIDES (1 to 7)
+    async function startBatchSlidesRunner() {
+        if (isBatchRunning) return;
+        isBatchRunning = true;
+        batchCancelRequested = false;
+
+        try {
+            let controls = findPaginationControls();
+            let total = controls.totalCount > 1 ? controls.totalCount : 7;
+            let current = controls.currentIdx || 1;
+
+            broadcastBatchProgress(Math.round((current / total) * 100), `Starting slide batch runner (${current}/${total})...`);
+
+            while (current <= total && !batchCancelRequested) {
+                await sleep(600);
+
+                const filename = extractLivePageTitle();
+                broadcastBatchProgress(Math.round((current / total) * 100), `Saving Slide ${current} of ${total}: ${filename}...`);
+
+                triggerDownload();
+                await sleep(2000);
+
+                if (current >= total || batchCancelRequested) break;
+
+                controls = findPaginationControls();
+                if (controls.nextBtn && !controls.nextBtn.disabled) {
+                    broadcastBatchProgress(Math.round((current / total) * 100), `Moving to slide ${current + 1} of ${total}...`);
+                    controls.nextBtn.click();
+                    await sleep(2800); // Wait for Angular to transition and load the new PDF
+                    controls = findPaginationControls();
+                    current = controls.currentIdx || (current + 1);
+                } else {
+                    break;
+                }
+            }
+
+            if (batchCancelRequested) {
+                broadcastBatchProgress(0, 'Batch download cancelled.', true);
+            } else {
+                broadcastBatchProgress(100, `🎉 All ${total} slides downloaded successfully!`, true);
+            }
+        } catch (err) {
+            broadcastBatchProgress(0, 'Batch error: ' + err.message, true);
+        } finally {
+            isBatchRunning = false;
+        }
+    }
+
+    // AUTOMATED BATCH RUNNER: ALL NOTES IN SIDEBAR
+    async function startBatchNotesRunner() {
+        if (isBatchRunning) return;
+        isBatchRunning = true;
+        batchCancelRequested = false;
+
+        try {
+            const items = findSidebarMaterials();
+            if (items.length === 0) {
+                broadcastBatchProgress(0, 'No sidebar material items detected.', true);
+                isBatchRunning = false;
+                return;
+            }
+
+            const total = items.length;
+            broadcastBatchProgress(5, `Found ${total} materials. Starting downloads...`);
+
+            for (let i = 0; i < total; i++) {
+                if (batchCancelRequested) break;
+
+                const item = items[i];
+                item.click();
+                await sleep(2800); // Wait for viewer to render selected note
+
+                const filename = extractLivePageTitle();
+                const pct = Math.round(((i + 1) / total) * 100);
+                broadcastBatchProgress(pct, `Downloaded ${i + 1}/${total}: ${filename}...`);
+
+                triggerDownload();
+                await sleep(2000);
+            }
+
+            if (batchCancelRequested) {
+                broadcastBatchProgress(0, 'Batch notes cancelled.', true);
+            } else {
+                broadcastBatchProgress(100, `🎉 All ${total} materials downloaded successfully!`, true);
+            }
+        } catch (err) {
+            broadcastBatchProgress(0, 'Batch error: ' + err.message, true);
+        } finally {
+            isBatchRunning = false;
+        }
+    }
+
+    function broadcastBatchProgress(percent, text, done = false) {
+        showFeedbackToast(text);
+        try {
+            chrome.runtime.sendMessage({
+                type: '__PEWWW_BATCH_PROGRESS__',
+                percent: percent,
+                text: text,
+                done: done
+            });
+        } catch (e) {}
+    }
+
     function handleKeyShortcut(e) {
         const isCtrlOrCmd = e.ctrlKey || e.metaKey;
         const isS = e.code === 'KeyS' || (e.key && e.key.toLowerCase() === 's');
@@ -247,9 +403,7 @@
             e.stopImmediatePropagation();
 
             const now = Date.now();
-            if (now - lastDownloadTime < 2500 || isExecutingDownload) {
-                return;
-            }
+            if (now - lastDownloadTime < 2000 || isExecutingDownload) return;
 
             if (window.self !== window.top) {
                 window.top.postMessage({ type: '__PEWWW_KEY_TRIGGER__' }, '*');
@@ -289,9 +443,9 @@
         return;
     }
 
-    function showFeedbackToast() {
+    function showFeedbackToast(customMsg) {
         let toast = document.getElementById('claude-pdf-toast');
-        const displayName = currentFilename || extractLivePageTitle();
+        const displayName = customMsg || ('Saving ' + (currentFilename || extractLivePageTitle()) + '...');
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'claude-pdf-toast';
@@ -319,7 +473,7 @@
                 visibility: hidden !important;
                 transform: translateY(8px) !important;
                 pointer-events: none !important;
-                max-width: 320px !important;
+                max-width: 360px !important;
             `;
             (document.body || document.documentElement).appendChild(toast);
         }
@@ -328,17 +482,15 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Saving ${displayName}...</span>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
         `;
 
         toast.style.visibility = 'visible';
         toast.style.opacity = '1';
         toast.style.transform = 'translateY(0)';
 
-        triggerPillVisualFeedback();
-
         setTimeout(() => {
-            if (toast) {
+            if (toast && !isBatchRunning) {
                 toast.style.opacity = '0';
                 toast.style.transform = 'translateY(8px)';
                 setTimeout(() => {
@@ -348,35 +500,6 @@
         }, 2200);
     }
 
-    function triggerPillVisualFeedback() {
-        const text = document.getElementById('claude-pill-text');
-        const iconBox = document.getElementById('claude-pill-icon-box');
-
-        if (text && iconBox) {
-            text.textContent = 'Saving...';
-            text.style.color = '#34D399';
-            iconBox.innerHTML = `
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-            `;
-            iconBox.style.background = 'rgba(52, 211, 153, 0.18)';
-
-            setTimeout(() => {
-                text.textContent = 'Download PDF';
-                text.style.color = '#FAF8F5';
-                iconBox.innerHTML = `
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D97757" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                `;
-                iconBox.style.background = 'rgba(217, 119, 87, 0.15)';
-            }, 2400);
-        }
-    }
-
     function getOrCreateClaudePill() {
         let pill = document.getElementById('claude-pdf-pill');
         if (pill) return pill;
@@ -384,7 +507,7 @@
         pill = document.createElement('div');
         pill.id = 'claude-pdf-pill';
         pill.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 9px;">
+            <div id="claude-pill-dl-single" style="display: flex; align-items: center; gap: 9px; cursor: pointer;">
                 <div id="claude-pill-icon-box" style="
                     width: 28px;
                     height: 28px;
@@ -408,6 +531,17 @@
                     letter-spacing: -0.015em;
                 ">Download PDF</span>
             </div>
+            <div id="claude-pill-batch-btn" style="
+                background: rgba(217, 119, 87, 0.18);
+                border: 1px solid rgba(217, 119, 87, 0.35);
+                color: #FAF8F5;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 3px 8px;
+                border-radius: 50px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            " title="Click to auto-download all 7 slides sequentially">⚡ All Slides</div>
             <div style="
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -435,8 +569,7 @@
             padding: 8px 14px 8px 10px !important;
             display: flex !important;
             align-items: center !important;
-            gap: 12px !important;
-            cursor: pointer !important;
+            gap: 10px !important;
             box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(217, 119, 87, 0.12) !important;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
             user-select: none !important;
@@ -447,6 +580,30 @@
             transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s, border-color 0.2s, box-shadow 0.2s !important;
         `;
 
+        const singleBtn = pill.querySelector('#claude-pill-dl-single');
+        if (singleBtn) {
+            singleBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                triggerDownload();
+            };
+        }
+
+        const batchBtn = pill.querySelector('#claude-pill-batch-btn');
+        if (batchBtn) {
+            batchBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                startBatchSlidesRunner();
+            };
+            batchBtn.onmouseenter = () => {
+                batchBtn.style.background = 'rgba(217, 119, 87, 0.35)';
+            };
+            batchBtn.onmouseleave = () => {
+                batchBtn.style.background = 'rgba(217, 119, 87, 0.18)';
+            };
+        }
+
         pill.onmouseenter = () => {
             pill.style.transform = 'translateY(-2px) scale(1.02)';
             pill.style.borderColor = 'rgba(217, 119, 87, 0.4)';
@@ -454,9 +611,7 @@
             const iconBox = document.getElementById('claude-pill-icon-box');
             if (iconBox) iconBox.style.background = 'rgba(217, 119, 87, 0.25)';
             const liveName = extractLivePageTitle();
-            if (liveName) {
-                pill.title = 'Download: ' + liveName;
-            }
+            if (liveName) pill.title = 'Download: ' + liveName;
         };
 
         pill.onmouseleave = () => {
@@ -465,12 +620,6 @@
             pill.style.boxShadow = '0 12px 32px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(217, 119, 87, 0.12)';
             const iconBox = document.getElementById('claude-pill-icon-box');
             if (iconBox) iconBox.style.background = 'rgba(217, 119, 87, 0.15)';
-        };
-
-        pill.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            triggerDownload();
         };
 
         const root = document.documentElement || document.body;
@@ -492,9 +641,14 @@
             pill.style.opacity = '1';
             pill.style.transform = 'translateY(0)';
             pill.style.pointerEvents = 'auto';
-            const liveName = extractLivePageTitle();
-            if (liveName) {
-                pill.title = 'Download: ' + liveName;
+
+            const pagination = findPaginationControls();
+            const batchPillBtn = document.getElementById('claude-pill-batch-btn');
+            if (batchPillBtn && pagination.totalCount > 1) {
+                batchPillBtn.textContent = `⚡ All (${pagination.totalCount})`;
+                batchPillBtn.style.display = 'block';
+            } else if (batchPillBtn) {
+                batchPillBtn.style.display = 'none';
             }
         } else {
             pill.style.opacity = '0';
@@ -527,10 +681,21 @@
             triggerDownload();
             sendResponse({ success: true, filename: extractLivePageTitle() });
         } else if (request.type === 'CHECK_PDF_STATUS') {
+            const pagination = findPaginationControls();
             sendResponse({
                 isOpen: isPdfOpen(),
-                filename: extractLivePageTitle()
+                filename: extractLivePageTitle(),
+                pagination: { current: pagination.currentIdx, total: pagination.totalCount }
             });
+        } else if (request.type === 'START_BATCH_SLIDES') {
+            startBatchSlidesRunner();
+            sendResponse({ started: true });
+        } else if (request.type === 'START_BATCH_NOTES') {
+            startBatchNotesRunner();
+            sendResponse({ started: true });
+        } else if (request.type === 'CANCEL_BATCH') {
+            batchCancelRequested = true;
+            sendResponse({ cancelled: true });
         }
     });
 })();
