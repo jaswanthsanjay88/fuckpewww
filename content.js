@@ -3,7 +3,7 @@
 
     const CHECK_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
     const DOWNLOAD_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
-    
+
     const BUTTON_STYLE =
         'position: fixed !important;' +
         'bottom: 30px !important;' +
@@ -30,19 +30,23 @@
     })();
 
     let currentPdfUrl = null;
+    let currentFilename = null;
 
-    const showDownloadButton = (url) => {
-        if (!url) return;
-        currentPdfUrl = url;
+    const showDownloadButton = (url, filename) => {
+        if (url) currentPdfUrl = url;
+        if (filename) currentFilename = filename;
+
+        const body = document.body;
+        if (!body) return;
 
         let btn = document.getElementById('stealth-dl-btn');
 
         if (!btn) {
             btn = document.createElement('button');
             btn.id = 'stealth-dl-btn';
-            btn.title = 'Download PDF';
+            btn.title = 'Download Course PDF';
             btn.style.cssText = BUTTON_STYLE;
-            
+
             btn.onmouseover = () => {
                 btn.style.backgroundColor = '#333333';
                 btn.style.transform = 'scale(1.1)';
@@ -51,60 +55,91 @@
                 btn.style.backgroundColor = '#000000';
                 btn.style.transform = 'scale(1)';
             };
-            document.body.appendChild(btn);
+            body.appendChild(btn);
         }
 
         btn.innerHTML = DOWNLOAD_ICON;
         btn.style.display = 'flex';
-        
+
         btn.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!currentPdfUrl) return;
 
-            chrome.runtime.sendMessage({ type: 'DOWNLOAD', url: currentPdfUrl }, () => {
-                if (chrome.runtime.lastError) return;
-                
-                btn.innerHTML = CHECK_ICON;
-                btn.style.borderColor = '#4ade80';
-                setTimeout(() => {
-                    btn.innerHTML = DOWNLOAD_ICON;
-                    btn.style.borderColor = '#ffffff';
-                }, 2000);
-            });
+            // Notify inject.js to extract PDF bytes directly from memory or trigger viewer download
+            window.postMessage({ type: 'REQUEST_PDF_DOWNLOAD', k: token }, '*');
+
+            // Fallback: If URL is available, also request background download
+            if (currentPdfUrl) {
+                chrome.runtime.sendMessage({
+                    type: 'DOWNLOAD',
+                    url: currentPdfUrl,
+                    filename: currentFilename
+                }, () => {
+                    if (chrome.runtime.lastError) {}
+                });
+            }
+
+            btn.innerHTML = CHECK_ICON;
+            btn.style.borderColor = '#4ade80';
+            setTimeout(() => {
+                btn.innerHTML = DOWNLOAD_ICON;
+                btn.style.borderColor = '#ffffff';
+            }, 2000);
         };
     };
 
     const scanDOMForPDFs = () => {
-        const isPdfUrl = (url) => {
-            if (typeof url !== 'string') return false;
-            const lower = url.toLowerCase();
-            return (lower.includes('storage.googleapis.com') || lower.includes('amazonaws.com')) && 
-                   lower.includes('.pdf') &&
-                   !lower.includes('api.paruluniversity.ac.in');
-        };
+        // 1. Detect ngx-extended-pdf-viewer or any embedded PDF viewer
+        const viewerElements = document.querySelectorAll(
+            'ngx-extended-pdf-viewer, pdf-viewer, #viewerContainer, .pdfViewer, #outerContainer'
+        );
+        if (viewerElements.length > 0) {
+            showDownloadButton();
 
+            // Unhide native download button in toolbar if hidden
+            document.querySelectorAll('#download, #secondaryDownload, button.download').forEach(el => {
+                try {
+                    el.style.setProperty('display', 'inline-flex', 'important');
+                    el.style.setProperty('visibility', 'visible', 'important');
+                    el.classList.remove('hidden');
+                    el.removeAttribute('hidden');
+                } catch (e) {}
+            });
+        }
+
+        // 2. Check for elements with ng-reflect-src containing pdf
+        document.querySelectorAll('[ng-reflect-src]').forEach(el => {
+            try {
+                const src = el.getAttribute('ng-reflect-src');
+                if (src && (src.includes('.pdf') || src.includes('storage.googleapis.com'))) {
+                    showDownloadButton(src);
+                }
+            } catch (e) {}
+        });
+
+        // 3. Check iframes
         document.querySelectorAll('iframe').forEach(el => {
             try {
-                if (el.src && isPdfUrl(el.src)) showDownloadButton(el.src);
+                if (el.src && (el.src.includes('.pdf') || el.src.includes('storage.googleapis.com'))) {
+                    showDownloadButton(el.src);
+                }
             } catch (e) {}
         });
 
-        document.querySelectorAll('embed').forEach(el => {
+        // 4. Check embeds and objects
+        document.querySelectorAll('embed, object').forEach(el => {
             try {
-                if (el.src && isPdfUrl(el.src)) showDownloadButton(el.src);
+                const src = el.src || el.data;
+                if (src && (src.includes('.pdf') || src.includes('storage.googleapis.com'))) {
+                    showDownloadButton(src);
+                }
             } catch (e) {}
         });
 
-        document.querySelectorAll('object').forEach(el => {
+        // 5. Check links
+        document.querySelectorAll('a[href*=".pdf"], a[href*="storage.googleapis.com"]').forEach(el => {
             try {
-                if (el.data && isPdfUrl(el.data)) showDownloadButton(el.data);
-            } catch (e) {}
-        });
-
-        document.querySelectorAll('a').forEach(el => {
-            try {
-                if (el.href && isPdfUrl(el.href)) showDownloadButton(el.href);
+                if (el.href) showDownloadButton(el.href);
             } catch (e) {}
         });
     };
@@ -122,20 +157,32 @@
     injectScript();
 
     window.addEventListener('message', function (e) {
-        if (e.source !== window || !e.data) {
-            return;
+        if (e.source !== window || !e.data) return;
+
+        if (e.data.type === 'PDF_READY' && e.data.k === token) {
+            showDownloadButton(e.data.url, e.data.filename);
         }
-        if (
-            e.data.type === 'PDF_URL_FOUND' &&
-            e.data.k === token &&
-            typeof e.data.url === 'string'
-        ) {
-            showDownloadButton(e.data.url);
+
+        if (e.data.type === 'PERFORM_EXTENSION_DOWNLOAD' && e.data.k === token && e.data.url) {
+            chrome.runtime.sendMessage({
+                type: 'DOWNLOAD',
+                url: e.data.url,
+                filename: e.data.filename
+            }, () => {
+                if (chrome.runtime.lastError) {}
+            });
         }
     });
 
-    scanDOMForPDFs();
-    setInterval(scanDOMForPDFs, 1500);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            scanDOMForPDFs();
+        });
+    } else {
+        scanDOMForPDFs();
+    }
+
+    setInterval(scanDOMForPDFs, 1000);
 
     const observer = new MutationObserver(() => {
         scanDOMForPDFs();
@@ -144,7 +191,7 @@
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['src', 'data', 'href']
+        attributeFilter: ['src', 'data', 'href', 'ng-reflect-src', 'class']
     });
 
 })();

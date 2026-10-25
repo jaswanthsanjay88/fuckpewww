@@ -1,8 +1,12 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'DOWNLOAD') {
-        // Extract the clean filename from the messy URL
-        let filename = message.url.split('/').pop().split('?')[0];
-        if (!filename.endsWith('.pdf')) filename += '.pdf';
+    if (message.type === 'DOWNLOAD' && message.url) {
+        let filename = message.filename;
+        if (!filename) {
+            filename = message.url.split('/').pop().split('?')[0];
+        }
+        if (!filename) filename = 'parul-document.pdf';
+        filename = filename.replace(/[\\/:*?"<>|]/g, '-').trim();
+        if (!filename.toLowerCase().endsWith('.pdf')) filename += '.pdf';
 
         chrome.downloads.download({
             url: message.url,
