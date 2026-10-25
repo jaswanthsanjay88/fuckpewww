@@ -1,20 +1,11 @@
-(function() {
+(function () {
     'use strict';
 
-    let __t = '';
-    if (document.currentScript) {
-        __t = document.currentScript.getAttribute('data-ext-token') || '';
-    } else {
-        const scr = document.querySelector('script[data-ext-token]');
-        if (scr) {
-            __t = scr.getAttribute('data-ext-token') || '';
-        }
-    }
-
-    if (!__t) return;
-
-    let currentPdfUrl = '';
-    let currentPdfFilename = '';
+    let isDownloading = false;
+    window.__PEWWW_HAS_PDF__ = false;
+    window.__PEWWW_CURRENT_PDF_BLOB__ = null;
+    window.__PEWWW_CURRENT_PDF_URL__ = null;
+    window.__PEWWW_PDF_DOC__ = null;
 
     function getCleanFilename(rawName) {
         if (!rawName || typeof rawName !== 'string') return '';
@@ -27,7 +18,7 @@
 
     function getPageFallbackTitle() {
         const selectors = [
-            '.course-title',
+            '.unit-title',
             '.chapter-title',
             '.subject-name',
             '.breadcrumb-item.active',
@@ -44,276 +35,329 @@
         if (document.title && document.title.trim().length > 1) {
             return getCleanFilename(document.title.trim());
         }
-        return 'parul-course-material.pdf';
+        return 'Parul-Course-Material.pdf';
     }
 
-    function notifyPdfReady(info) {
-        if (info.url && !currentPdfUrl) {
-            currentPdfUrl = info.url;
+    function markPdfReady(url, blob, doc) {
+        window.__PEWWW_HAS_PDF__ = true;
+        if (url && !window.__PEWWW_CURRENT_PDF_URL__) {
+            window.__PEWWW_CURRENT_PDF_URL__ = url;
         }
-        if (info.filename && !currentPdfFilename) {
-            currentPdfFilename = info.filename;
+        if (blob && !window.__PEWWW_CURRENT_PDF_BLOB__) {
+            window.__PEWWW_CURRENT_PDF_BLOB__ = blob;
         }
-        if (!currentPdfFilename && currentPdfUrl) {
-            currentPdfFilename = getCleanFilename(currentPdfUrl);
+        if (doc && !window.__PEWWW_PDF_DOC__) {
+            window.__PEWWW_PDF_DOC__ = doc;
         }
-        if (!currentPdfFilename) {
-            currentPdfFilename = getPageFallbackTitle();
-        }
-
-        window.postMessage({
-            type: 'PDF_READY',
-            k: __t,
-            url: currentPdfUrl,
-            filename: currentPdfFilename
-        }, '*');
+        try {
+            window.postMessage({
+                type: '__PEWWW_CHECK_STATUS_RES__',
+                isLoaded: true,
+                url: window.__PEWWW_CURRENT_PDF_URL__
+            }, '*');
+        } catch (e) {}
     }
 
-    function inspectUrl(rawUrl) {
-        if (!rawUrl || typeof rawUrl !== 'string') return;
-        const lower = rawUrl.toLowerCase();
+    // 1. Hook window.fetch to capture PDF stream, blob, or signed URLs
+    const originalFetch = window.fetch;
+    window.fetch = async function (...args) {
+        let urlStr = '';
+        if (args[0]) {
+            if (typeof args[0] === 'string') urlStr = args[0];
+            else if (typeof args[0] === 'object' && args[0].url) urlStr = args[0].url;
+            else if (args[0].toString) urlStr = args[0].toString();
+        }
 
+        const lower = urlStr.toLowerCase();
         if (lower.includes('signed-url') && lower.includes('url=')) {
             try {
-                const parsed = new URL(rawUrl, window.location.href);
+                const parsed = new URL(urlStr, window.location.href);
                 const target = parsed.searchParams.get('url');
                 if (target) {
-                    const decoded = decodeURIComponent(target);
-                    notifyPdfReady({
-                        url: decoded,
-                        filename: getCleanFilename(decoded)
-                    });
-                    return;
+                    markPdfReady(decodeURIComponent(target));
                 }
             } catch (e) {}
+        } else if (lower.includes('.pdf') || (lower.includes('storage.googleapis.com') && lower.includes('parul'))) {
+            markPdfReady(urlStr);
         }
 
-        const isStorageDomain = lower.includes('storage.googleapis.com') || lower.includes('amazonaws.com');
-        const hasPdf = lower.includes('.pdf') || lower.includes('pdf');
-        const isNotScript = !lower.endsWith('.js') && !lower.endsWith('.css') && !lower.endsWith('.html');
+        const response = await originalFetch.apply(this, args);
 
-        if ((isStorageDomain || hasPdf) && isNotScript) {
-            notifyPdfReady({
-                url: rawUrl,
-                filename: getCleanFilename(rawUrl)
-            });
-        }
-    }
-
-    // Intercept window.fetch
-    const originalFetch = window.fetch;
-    window.fetch = async function(...args) {
-        if (args[0]) {
-            let urlStr = '';
-            if (typeof args[0] === 'string') {
-                urlStr = args[0];
-            } else if (typeof args[0] === 'object' && args[0].url) {
-                urlStr = args[0].url;
-            } else if (args[0].toString) {
-                urlStr = args[0].toString();
-            }
-
-            inspectUrl(urlStr);
-
-            const response = await originalFetch.apply(this, args);
-
-            if (urlStr && (urlStr.includes('/signed-url') || urlStr.includes('api/assets'))) {
-                try {
-                    const clone = response.clone();
-                    clone.json().then(data => {
-                        if (!data) return;
-                        if (typeof data.signedUrl === 'string') {
-                            notifyPdfReady({ url: data.signedUrl, filename: getCleanFilename(data.signedUrl) });
-                        } else if (typeof data.url === 'string') {
-                            notifyPdfReady({ url: data.url, filename: getCleanFilename(data.url) });
-                        } else if (typeof data.response === 'string' && window.CryptoJS) {
-                            try {
-                                const secretKey = "sdm8Yy6OCCH5Du/IxBC3yJ17gkEECG3VEUwnQgGFyNKs0OyvdCtNi2AxTzUcQE94";
-                                const bytes = window.CryptoJS.AES.decrypt(data.response, secretKey);
-                                let decrypted = bytes.toString(window.CryptoJS.enc.Utf8);
-                                if (decrypted) {
-                                    if (decrypted.startsWith('"') && decrypted.endsWith('"')) {
-                                        decrypted = decrypted.slice(1, -1);
-                                    }
-                                    if (decrypted.startsWith('{')) {
-                                        const parsed = JSON.parse(decrypted);
-                                        const finalUrl = parsed.signedUrl || parsed.url || parsed.link;
-                                        if (finalUrl) notifyPdfReady({ url: finalUrl, filename: getCleanFilename(finalUrl) });
-                                    } else if (decrypted.includes('http')) {
-                                        notifyPdfReady({ url: decrypted.trim(), filename: getCleanFilename(decrypted.trim()) });
-                                    }
+        try {
+            const contentType = response.headers && response.headers.get('content-type');
+            if (contentType && contentType.toLowerCase().includes('application/pdf')) {
+                const clone = response.clone();
+                clone.blob().then((blob) => {
+                    markPdfReady(urlStr, blob);
+                }).catch(() => {});
+            } else if (urlStr && (lower.includes('/signed-url') || lower.includes('api/assets'))) {
+                const clone = response.clone();
+                clone.json().then((data) => {
+                    if (!data) return;
+                    if (typeof data.signedUrl === 'string') {
+                        markPdfReady(data.signedUrl);
+                    } else if (typeof data.url === 'string') {
+                        markPdfReady(data.url);
+                    } else if (typeof data.response === 'string' && window.CryptoJS) {
+                        try {
+                            const secretKey = "sdm8Yy6OCCH5Du/IxBC3yJ17gkEECG3VEUwnQgGFyNKs0OyvdCtNi2AxTzUcQE94";
+                            const bytes = window.CryptoJS.AES.decrypt(data.response, secretKey);
+                            let decrypted = bytes.toString(window.CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                if (decrypted.startsWith('"') && decrypted.endsWith('"')) {
+                                    decrypted = decrypted.slice(1, -1);
                                 }
-                            } catch (e) {}
-                        }
-                    }).catch(() => {});
-                } catch (e) {}
+                                if (decrypted.startsWith('{')) {
+                                    const parsed = JSON.parse(decrypted);
+                                    const finalUrl = parsed.signedUrl || parsed.url || parsed.link;
+                                    if (finalUrl) markPdfReady(finalUrl);
+                                } else if (decrypted.includes('http')) {
+                                    markPdfReady(decrypted.trim());
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }).catch(() => {});
             }
+        } catch (e) {}
 
-            return response;
-        }
-        return originalFetch.apply(this, args);
+        return response;
     };
 
-    // Intercept XMLHttpRequest
+    // 2. Hook XMLHttpRequest
     const originalOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url) {
+    XMLHttpRequest.prototype.open = function (method, url) {
         if (url) {
-            let urlStr = '';
-            if (typeof url === 'string') {
-                urlStr = url;
-            } else if (url && url.href) {
-                urlStr = url.href;
-            } else {
-                urlStr = url.toString();
+            const urlStr = typeof url === 'string' ? url : (url.href || url.toString());
+            const lower = urlStr.toLowerCase();
+            if (lower.includes('.pdf') || (lower.includes('storage.googleapis.com') && lower.includes('parul'))) {
+                markPdfReady(urlStr);
             }
-            inspectUrl(urlStr);
+            this.addEventListener('load', function () {
+                try {
+                    const ct = this.getResponseHeader && this.getResponseHeader('content-type');
+                    if (ct && ct.toLowerCase().includes('application/pdf')) {
+                        if (this.response instanceof Blob) {
+                            markPdfReady(urlStr, this.response);
+                        } else if (this.response instanceof ArrayBuffer) {
+                            markPdfReady(urlStr, new Blob([this.response], { type: 'application/pdf' }));
+                        }
+                    }
+                } catch (e) {}
+            });
         }
         return originalOpen.apply(this, arguments);
     };
 
-    // Hook ngx-extended-pdf-viewer / PDF.js
-    function checkPdfViewerApp() {
+    // 3. Hook PDF.js library getDocument
+    function hookPdfJs(lib) {
+        if (!lib || lib.__pewww_hooked) return;
+        lib.__pewww_hooked = true;
+        const origGetDoc = lib.getDocument;
+        lib.getDocument = function (param) {
+            if (typeof param === 'string') {
+                markPdfReady(param);
+            } else if (param && param.url) {
+                markPdfReady(param.url);
+            } else if (param && param.data) {
+                try {
+                    const blob = new Blob([param.data], { type: 'application/pdf' });
+                    markPdfReady(null, blob);
+                } catch (e) {}
+            }
+            const task = origGetDoc.apply(this, arguments);
+            try {
+                task.promise.then((doc) => {
+                    markPdfReady(null, null, doc);
+                }).catch(() => {});
+            } catch (e) {}
+            return task;
+        };
+    }
+
+    if (window.pdfjsLib) hookPdfJs(window.pdfjsLib);
+    let _pdfjsVal = window.pdfjsLib;
+    try {
+        Object.defineProperty(window, 'pdfjsLib', {
+            configurable: true,
+            enumerable: true,
+            get() { return _pdfjsVal; },
+            set(v) {
+                _pdfjsVal = v;
+                hookPdfJs(v);
+            }
+        });
+    } catch (e) {}
+
+    // 4. Hook PDFViewerApplication (for ngx-extended-pdf-viewer)
+    function hookViewerApp() {
         const app = window.PDFViewerApplication;
         if (!app) return false;
 
-        if (app.eventBus && !app._fcukHooked) {
-            app._fcukHooked = true;
-            app.eventBus.on('documentloaded', onDocumentLoaded);
-            app.eventBus.on('pagesloaded', onDocumentLoaded);
+        if (app.eventBus && !app._pewww_bus_hooked) {
+            app._pewww_bus_hooked = true;
+            app.eventBus.on('documentloaded', () => markPdfReady(app.url || app.baseUrl, null, app.pdfDocument));
+            app.eventBus.on('pagesloaded', () => markPdfReady(app.url || app.baseUrl, null, app.pdfDocument));
         }
 
-        if (app.pdfDocument) {
-            onDocumentLoaded();
-            return true;
-        }
-
-        if (app.url || app.baseUrl) {
-            const u = app.url || app.baseUrl;
-            notifyPdfReady({ url: u, filename: getCleanFilename(u) });
+        if (app.pdfDocument || (app.pagesCount && app.pagesCount > 0)) {
+            markPdfReady(app.url || app.baseUrl, null, app.pdfDocument);
             return true;
         }
 
         return false;
     }
 
-    function onDocumentLoaded() {
-        const app = window.PDFViewerApplication;
-        if (!app) return;
+    document.addEventListener('webviewerloaded', () => {
+        hookViewerApp();
+        if (window.PDFViewerApplication && window.PDFViewerApplication.initializedPromise) {
+            window.PDFViewerApplication.initializedPromise.then(() => hookViewerApp()).catch(() => {});
+        }
+    });
 
-        let filename = '';
-        const url = app.url || app.baseUrl || '';
+    setInterval(() => {
+        hookViewerApp();
 
-        if (app.pdfDocument && app.pdfDocument.metadata) {
+        // Check ng2-pdf-viewer or custom Angular component
+        const viewerEl = document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container');
+        if (viewerEl) {
+            const reflectSrc = viewerEl.getAttribute('ng-reflect-src') || viewerEl.getAttribute('src');
+            if (reflectSrc) {
+                markPdfReady(reflectSrc);
+            } else {
+                markPdfReady();
+            }
+
+            if (window.ng && typeof window.ng.getComponent === 'function') {
+                try {
+                    const comp = window.ng.getComponent(viewerEl);
+                    if (comp) {
+                        const pdf = comp._pdf || comp.pdf || comp.pdfDocument;
+                        if (pdf) markPdfReady(comp.src || comp.pdfSrc, null, pdf);
+                        else if (comp.src || comp.pdfSrc) markPdfReady(comp.src || comp.pdfSrc);
+                    }
+                } catch (e) {}
+            }
+        }
+    }, 800);
+
+    function triggerBlobDownload(blob, filename) {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || getPageFallbackTitle();
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            a.remove();
+            URL.revokeObjectURL(blobUrl);
+        }, 15000);
+        window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+    }
+
+    async function runDownload() {
+        if (isDownloading) return false;
+        isDownloading = true;
+        setTimeout(() => { isDownloading = false; }, 2000);
+
+        const filename = getPageFallbackTitle();
+
+        // Strategy 1: Captured PDF Blob in memory
+        if (window.__PEWWW_CURRENT_PDF_BLOB__) {
+            triggerBlobDownload(window.__PEWWW_CURRENT_PDF_BLOB__, filename);
+            return true;
+        }
+
+        // Strategy 2: PDFDocumentProxy from pdfjsLib or ng2-pdf-viewer
+        const activeDoc = window.__PEWWW_PDF_DOC__ || (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument);
+        if (activeDoc && typeof activeDoc.getData === 'function') {
             try {
-                const info = app.pdfDocument.metadata.info;
-                if (info && info.Title) {
-                    filename = getCleanFilename(info.Title);
+                const data = await activeDoc.getData();
+                if (data && data.length > 0) {
+                    const blob = new Blob([data], { type: 'application/pdf' });
+                    triggerBlobDownload(blob, filename);
+                    return true;
                 }
             } catch (e) {}
         }
 
-        if (!filename && url) {
-            filename = getCleanFilename(url);
-        }
-        if (!filename) {
-            filename = getPageFallbackTitle();
-        }
-
-        notifyPdfReady({
-            url: url,
-            filename: filename
-        });
-    }
-
-    document.addEventListener('webviewerloaded', () => {
-        if (window.PDFViewerApplication) {
-            if (window.PDFViewerApplication.initializedPromise) {
-                window.PDFViewerApplication.initializedPromise.then(() => {
-                    checkPdfViewerApp();
-                }).catch(() => {});
-            } else {
-                checkPdfViewerApp();
-            }
-        }
-    });
-
-    // Check periodically for PDFViewerApplication or DOM viewer
-    setInterval(() => {
-        checkPdfViewerApp();
-
-        const ngxViewer = document.querySelector('ngx-extended-pdf-viewer, pdf-viewer, #viewerContainer, .pdfViewer');
-        if (ngxViewer) {
-            const reflectSrc = ngxViewer.getAttribute('ng-reflect-src') || ngxViewer.getAttribute('src');
-            if (reflectSrc) {
-                inspectUrl(reflectSrc);
-            }
-            notifyPdfReady({
-                url: currentPdfUrl,
-                filename: currentPdfFilename || getPageFallbackTitle()
-            });
-        }
-    }, 1000);
-
-    // Handle download request triggered by floating button click
-    window.addEventListener('message', async (e) => {
-        if (e.source !== window || !e.data) return;
-        if (e.data.type === 'REQUEST_PDF_DOWNLOAD' && e.data.k === __t) {
-            const app = window.PDFViewerApplication;
-            const targetFilename = currentPdfFilename || getPageFallbackTitle();
-
-            // 1. Direct raw memory extraction from PDFViewerApplication.pdfDocument.getData()
-            if (app && app.pdfDocument && typeof app.pdfDocument.getData === 'function') {
-                try {
-                    const data = await app.pdfDocument.getData();
+        // Strategy 3: Angular Component inspection for ng2-pdf-viewer
+        const viewerEl = document.querySelector('pdf-viewer, ngx-extended-pdf-viewer');
+        if (viewerEl && window.ng && typeof window.ng.getComponent === 'function') {
+            try {
+                const comp = window.ng.getComponent(viewerEl);
+                const pdf = comp && (comp._pdf || comp.pdf || comp.pdfDocument);
+                if (pdf && typeof pdf.getData === 'function') {
+                    const data = await pdf.getData();
                     if (data && data.length > 0) {
                         const blob = new Blob([data], { type: 'application/pdf' });
-                        const blobUrl = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = blobUrl;
-                        a.download = targetFilename;
-                        document.body.appendChild(a);
-                        a.click();
-                        setTimeout(() => {
-                            a.remove();
-                            URL.revokeObjectURL(blobUrl);
-                        }, 15000);
-                        return;
+                        triggerBlobDownload(blob, filename);
+                        return true;
                     }
-                } catch (err) {}
-            }
+                }
+            } catch (e) {}
+        }
 
-            // 2. Built-in viewer download action
-            if (app && typeof app.download === 'function') {
-                try {
-                    app.download();
-                    return;
-                } catch (err) {}
-            }
-            if (app && typeof app.downloadOrSave === 'function') {
-                try {
+        // Strategy 4: Native PDFViewerApplication downloadOrSave / download
+        const app = window.PDFViewerApplication;
+        if (app) {
+            try {
+                if (typeof app.downloadOrSave === 'function') {
                     app.downloadOrSave();
-                    return;
-                } catch (err) {}
-            }
+                    window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                    return true;
+                }
+                if (typeof app.download === 'function') {
+                    app.download();
+                    window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                    return true;
+                }
+            } catch (e) {}
+        }
 
-            // 3. Native download button click if present
-            const nativeBtn = document.querySelector('#download, #secondaryDownload');
-            if (nativeBtn) {
-                try {
-                    nativeBtn.click();
-                    return;
-                } catch (err) {}
-            }
+        // Strategy 5: Download captured URL via link
+        if (window.__PEWWW_CURRENT_PDF_URL__) {
+            try {
+                const a = document.createElement('a');
+                a.href = window.__PEWWW_CURRENT_PDF_URL__;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => a.remove(), 2000);
+                window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+                return true;
+            } catch (e) {}
+        }
 
-            // 4. Fallback to background script download using captured URL
-            if (currentPdfUrl) {
-                window.postMessage({
-                    type: 'PERFORM_EXTENSION_DOWNLOAD',
-                    k: __t,
-                    url: currentPdfUrl,
-                    filename: targetFilename
-                }, '*');
-            }
+        // Strategy 6: Native toolbar button click
+        const btn = document.querySelector('#download, #secondaryDownload');
+        if (btn) {
+            btn.click();
+            window.postMessage({ type: '__PEWWW_DOWNLOAD_SUCCESS__' }, '*');
+            return true;
+        }
+
+        return false;
+    }
+
+    // Listen for download triggers
+    window.addEventListener('message', function (e) {
+        if (!e.data) return;
+        if (e.data.type === '__PEWWW_EXECUTE_DOWNLOAD__') {
+            runDownload();
+        } else if (e.data.type === '__PEWWW_CHECK_STATUS_REQ__') {
+            window.postMessage({
+                type: '__PEWWW_CHECK_STATUS_RES__',
+                isLoaded: window.__PEWWW_HAS_PDF__ || !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container')
+            }, '*');
         }
     });
+
+    try {
+        window.postMessage({
+            type: '__PEWWW_CHECK_STATUS_RES__',
+            isLoaded: !!window.PDFViewerApplication || !!document.querySelector('pdf-viewer, ngx-extended-pdf-viewer, .ng2-pdf-viewer-container')
+        }, '*');
+    } catch (e) {}
 })();
